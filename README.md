@@ -11,13 +11,11 @@ Workflows in this repository are:
 - Configurable through explicit inputs and secrets
 - Suitable for use in public and private repositories
 
-## Usage
+## Available Workflows
 
-Workflows are referenced directly from this repository:
-
-```yaml
-uses: udx/reusable-workflows/.github/workflows/<workflow>.yml@master
-```
+| Workflow                                               | Description                                                                                            | Documentation                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| **[docker-ops.yml](.github/workflows/docker-ops.yml)** | Build, scan, and publish Docker images to Docker Hub and GCP Artifact Registry with security scanning. | [Docs](docs/docker-ops.md) · [Examples](examples/docker-ops.yml) |
 
 ## License
 

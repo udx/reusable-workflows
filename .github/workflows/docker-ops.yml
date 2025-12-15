@@ -1,0 +1,999 @@
+---
+name: Docker Release
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: "Name of the Docker image"
+        required: true
+        type: string
+      gcp_region:
+        description: "GCP region for Artifact Registry"
+        required: false
+        type: string
+      gcp_project_id:
+        description: "GCP project ID"
+        required: false
+        type: string
+      gcp_repo:
+        description: "GCP Artifact Registry repository name"
+        required: false
+        type: string
+      release_branch:
+        description: "Branch name that triggers releases"
+        required: false
+        default: "latest"
+        type: string
+      dockerfile_path:
+        description: "Path to the Dockerfile"
+        required: false
+        default: "./Dockerfile"
+        type: string
+      build_platforms:
+        description: "Platforms to release to Docker Hub (comma-separated)"
+        required: false
+        default: "linux/amd64,linux/arm64"
+        type: string
+      version_config_path:
+        description: "Path to GitVersion config file"
+        required: false
+        default: "ci/git-version.yml"
+        type: string
+      build_args:
+        description: "Additional build arguments in format ARG1=value1,ARG2=value2"
+        required: false
+        default: ""
+        type: string
+      enable_security_scan:
+        description: "Whether to perform a security scan"
+        required: false
+        default: "true"
+        type: string
+      enable_security_upload:
+        description: "Whether to upload vulnerability scan results to GitHub Security"
+        required: false
+        default: "true"
+        type: string
+      docker_login:
+        description: "Docker Hub username"
+        required: false
+        type: string
+      docker_org:
+        description: "Docker Hub organization name"
+        required: false
+        type: string
+      docker_repo:
+        description: "Docker Hub repository name"
+        required: false
+        type: string
+    secrets:
+      docker_token:
+        description: "Docker Hub token for authentication"
+        required: false
+      gcp_credentials:
+        description: "GCP service account credentials JSON"
+        required: false
+
+      slack_webhook_url:
+        description: "Slack webhook URL for notifications"
+        required: false
+
+jobs:
+  config:
+    runs-on: ubuntu-24.04
+    outputs:
+      # Version and branch information
+      current_branch: ${{ steps.branches.outputs.branch_name }}
+      is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
+      release_branch: ${{ steps.store_inputs.outputs.release_branch }}
+      release_version: ${{ steps.set_version.outputs.version }}
+      version_source: ${{ steps.set_version.outputs.version_source }}
+      version_config_path: ${{ steps.store_inputs.outputs.version_config_path }}
+
+      # Docker configuration
+      docker_has_credentials: ${{ steps.extract_docker_creds.outputs.has_credentials }}
+      docker_login: ${{ steps.extract_docker_creds.outputs.docker_login }}
+      docker_has_publish_config: ${{ steps.extract_docker_publish_config.outputs.has_config }}
+      docker_org: ${{ steps.extract_docker_publish_config.outputs.docker_org }}
+      docker_repo: ${{ steps.extract_docker_publish_config.outputs.docker_repo }}
+
+      # GCP configuration
+      gcp_has_credentials: ${{ steps.extract_gcp_creds.outputs.has_credentials }}
+      gcp_region: ${{ steps.extract_gcp_creds.outputs.gcp_region }}
+      gcp_project_id: ${{ steps.extract_gcp_creds.outputs.gcp_project_id }}
+      gcp_repo: ${{ steps.extract_gcp_creds.outputs.gcp_repo }}
+
+      # Build configuration
+      image_name: ${{ steps.store_inputs.outputs.image_name }}
+      dockerfile_path: ${{ steps.store_inputs.outputs.dockerfile_path }}
+      build_platforms: ${{ steps.store_inputs.outputs.build_platforms }}
+      build_args: ${{ steps.parse_build_args.outputs.build_args }}
+
+      # Notification configuration
+      has_slack_webhook: ${{ steps.extract_slack_webhook.outputs.has_webhook }}
+
+      # Security configuration
+      enable_security_scan: ${{ steps.store_inputs.outputs.enable_security_scan }}
+      enable_security_upload: ${{ steps.store_inputs.outputs.enable_security_upload }}
+
+    steps:
+      - name: Store inputs as outputs
+        id: store_inputs
+        run: |
+          echo "🔄 Processing workflow inputs..."
+          # Store all workflow inputs as outputs
+          echo "image_name=${{ inputs.image_name }}" >> $GITHUB_OUTPUT
+          echo "release_branch=${{ inputs.release_branch }}" >> $GITHUB_OUTPUT
+          echo "dockerfile_path=${{ inputs.dockerfile_path }}" >> $GITHUB_OUTPUT
+          echo "build_platforms=${{ inputs.build_platforms }}" >> $GITHUB_OUTPUT
+          echo "version_config_path=${{ inputs.version_config_path }}" >> $GITHUB_OUTPUT
+          echo "provided_version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+
+          # Store GCP inputs
+          echo "gcp_region=${{ inputs.gcp_region }}" >> $GITHUB_OUTPUT
+          echo "gcp_project_id=${{ inputs.gcp_project_id }}" >> $GITHUB_OUTPUT
+          echo "gcp_repo=${{ inputs.gcp_repo }}" >> $GITHUB_OUTPUT
+
+          # Store security upload setting
+          echo "enable_security_scan=${{ inputs.enable_security_scan }}" >> $GITHUB_OUTPUT
+          echo "enable_security_upload=${{ inputs.enable_security_upload }}" >> $GITHUB_OUTPUT
+
+          # Log stored inputs
+          echo "✅ All workflow inputs stored as outputs"
+          echo "📋 Image: ${{ inputs.image_name }}"
+          echo "📋 Release branch: ${{ inputs.release_branch }}"
+          echo "📋 Dockerfile path: ${{ inputs.dockerfile_path }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for package.json
+        id: check_package_json
+        run: |
+          if [ -f "./package.json" ]; then
+            echo "has_package_json=true" >> $GITHUB_OUTPUT
+            echo "📦 Found package.json file"
+          else
+            echo "has_package_json=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No package.json file found"
+          fi
+
+      - name: Get version from package.json
+        id: package_version
+        if: steps.check_package_json.outputs.has_package_json == 'true'
+        run: |
+          echo "🔍 Extracting version from package.json..."
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📋 Package.json version: $VERSION"
+
+      - name: Determine version source
+        id: check_version
+        run: |
+          if [ "${{ steps.check_package_json.outputs.has_package_json }}" == "true" ]; then
+            echo "use_gitversion=false" >> $GITHUB_OUTPUT
+            echo "version_source=package.json" >> $GITHUB_OUTPUT
+            echo "📋 Using version from package.json: ${{ steps.package_version.outputs.version }}"
+          else
+            echo "use_gitversion=true" >> $GITHUB_OUTPUT
+            echo "version_source=gitversion" >> $GITHUB_OUTPUT
+            echo "📋 Will determine version using GitVersion"
+          fi
+
+      - name: Install GitVersion
+        if: steps.check_version.outputs.use_gitversion == 'true'
+        uses: gittools/actions/gitversion/setup@v4.1.0
+        with:
+          versionSpec: "6.1.0"
+
+      - name: Clear GitVersion Cache
+        if: steps.check_version.outputs.use_gitversion == 'true'
+        run: |
+          rm -rf .git/gitversion_cache
+          echo "GitVersion cache cleared."
+
+      - name: Check if GitVersion config exists
+        id: check_gitversion_config
+        if: steps.check_version.outputs.use_gitversion == 'true'
+        run: |
+          if [ -f "${{ steps.store_inputs.outputs.version_config_path }}" ]; then
+            echo "config_exists=true" >> $GITHUB_OUTPUT
+            echo "GitVersion config file found at ${{ steps.store_inputs.outputs.version_config_path }}."
+          else
+            echo "config_exists=false" >> $GITHUB_OUTPUT
+            echo "::error:: GitVersion config file not found at ${{ steps.store_inputs.outputs.version_config_path }}."
+            exit 1
+          fi
+
+      - name: Determine Version
+        id: gitversion
+        if: steps.check_version.outputs.use_gitversion == 'true'
+        uses: gittools/actions/gitversion/execute@v4.1.0
+        with:
+          configFilePath: ${{ steps.store_inputs.outputs.version_config_path }}
+
+      - name: Determine Branch Information
+        id: branches
+        shell: bash
+        run: |
+          echo "🔄 Analyzing branch information..."
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "📌 Current branch: ${BRANCH_NAME}"
+
+          IS_RELEASE_BRANCH=$([[ "${BRANCH_NAME}" == "${{ steps.store_inputs.outputs.release_branch }}" ]] && echo "true" || echo "false")
+          if [ "$IS_RELEASE_BRANCH" = "true" ]; then
+            echo "✅ Branch matches release branch: ${{ steps.store_inputs.outputs.release_branch }}"
+          else
+            echo "⚠️ Branch does not match release branch: ${{ steps.store_inputs.outputs.release_branch }}"
+          fi
+          echo "is_release_branch=${IS_RELEASE_BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Branch analysis completed"
+
+      - name: Set Version
+        id: set_version
+        run: |
+          echo "🔄 Setting version..."
+          if [ "${{ steps.check_version.outputs.use_gitversion }}" == "true" ]; then
+            # Get version from GitVersion
+            VERSION="${{ steps.gitversion.outputs.semVer }}"
+            VERSION_SOURCE="GitVersion"
+          else
+            # Get version from package.json
+            VERSION="${{ steps.package_version.outputs.version }}"
+            VERSION_SOURCE="package.json"
+          fi
+
+          # Set standard outputs regardless of version source
+          echo "🏷️ Version determined: ${VERSION} (${VERSION_SOURCE})"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_source=${VERSION_SOURCE}" >> $GITHUB_OUTPUT
+          echo "✅ Version set successfully"
+
+      - name: Extract Docker Hub Credentials
+        id: extract_docker_creds
+        run: |
+          echo "🔄 Checking Docker Hub credentials..."
+          # Store Docker Hub credentials securely
+          DOCKER_TOKEN="${{ secrets.docker_token }}"
+          DOCKER_LOGIN="${{ inputs.docker_login }}"
+
+          echo "docker_login=${DOCKER_LOGIN}" >> $GITHUB_OUTPUT
+
+          if [ -n "${DOCKER_TOKEN}" ] && [ -n "${DOCKER_LOGIN}" ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "✅ Docker Hub credentials found"
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Docker Hub credentials not found"
+          fi
+
+      - name: Extract Docker Hub Publishing Config
+        id: extract_docker_publish_config
+        run: |
+          echo "🔄 Checking Docker Hub publishing configuration..."
+          # Store Docker Hub publishing config
+          DOCKER_ORG="${{ inputs.docker_org }}"
+          DOCKER_REPO="${{ inputs.docker_repo }}"
+
+          if [ -n "${DOCKER_ORG}" ] && [ -n "${DOCKER_REPO}" ]; then
+            echo "has_config=true" >> $GITHUB_OUTPUT
+            echo "docker_org=${DOCKER_ORG}" >> $GITHUB_OUTPUT
+            echo "docker_repo=${DOCKER_REPO}" >> $GITHUB_OUTPUT
+            echo "✅ Docker Hub publishing config found"
+          else
+            echo "has_config=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Docker Hub publishing config not found (both docker_org and docker_repo required)"
+          fi
+
+      - name: Extract and Check GCP Credentials
+        id: extract_gcp_creds
+        run: |
+          echo "🔄 Checking GCP credentials and configuration..."
+          # Get inputs from store_inputs step
+          GCP_REGION="${{ steps.store_inputs.outputs.gcp_region }}"
+          GCP_PROJECT_ID="${{ steps.store_inputs.outputs.gcp_project_id }}"
+          GCP_REPO="${{ steps.store_inputs.outputs.gcp_repo }}"
+
+          # Define parameter map for validation
+          declare -A params=(
+            [gcp_region]="$GCP_REGION"
+            [gcp_project_id]="$GCP_PROJECT_ID"
+            [gcp_repo]="$GCP_REPO"
+          )
+
+          # Set GCP credentials check directly
+          HAS_GCP_CREDS="${{ secrets.gcp_credentials != '' }}"
+
+          # Log the status
+          if [ "$HAS_GCP_CREDS" = "true" ]; then
+            echo "ℹ️ GCP credentials found"
+          else
+            echo "⚠️ GCP credentials not found"
+          fi
+
+          # Initialize variables
+          ALL_PARAMS_SET=true
+          MISSING_PARAMS=""
+
+          # Check each parameter
+          for param in "${!params[@]}"; do
+            if [ -n "${params[$param]}" ]; then
+              # Parameter is set, add to output
+              echo "$param=${params[$param]}" >> $GITHUB_OUTPUT
+              echo "ℹ️ GCP $param: ${params[$param]}"
+            else
+              # Parameter is missing
+              ALL_PARAMS_SET=false
+              MISSING_PARAMS="$MISSING_PARAMS $param,"
+            fi
+          done
+
+          # Add GCP credentials to validation
+          if [ "$HAS_GCP_CREDS" != "true" ]; then
+            ALL_PARAMS_SET=false
+            MISSING_PARAMS="$MISSING_PARAMS GCP Credentials,"
+          fi
+
+          # Set has_credentials output
+          if [ "$ALL_PARAMS_SET" = true ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "✅ GCP credentials and configuration complete"
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Missing GCP parameters:${MISSING_PARAMS%,}"
+          fi
+
+      - name: Extract and Check Slack Webhook
+        id: extract_slack_webhook
+        run: |
+          echo "🔄 Checking Slack webhook..."
+          SLACK_WEBHOOK="${{ secrets.slack_webhook_url }}"
+          if [ -n "${SLACK_WEBHOOK}" ]; then
+            echo "has_webhook=true" >> $GITHUB_OUTPUT
+            echo "✅ Slack webhook found"
+          else
+            echo "has_webhook=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Slack webhook not configured"
+          fi
+
+      - name: Parse build arguments
+        id: parse_build_args
+        run: |
+          echo "🔄 Processing build arguments..."
+          # Get build args from inputs
+          BUILD_ARGS_INPUT="${{ inputs.build_args }}"
+          RELEASE_VERSION="${{ steps.set_version.outputs.version }}"
+          BRANCH_NAME="${{ steps.branches.outputs.branch_name }}"
+
+          # Process user-provided build args
+          if [ -n "${BUILD_ARGS_INPUT}" ]; then
+            # Convert comma-separated args to newline-separated for build-args format
+            BUILD_ARGS_TEMP=$(echo "${BUILD_ARGS_INPUT}" | tr ',' '\n')
+            
+            # Process placeholders
+            echo "🔄 Processing placeholders in build arguments..."
+            BUILD_ARGS=""
+            while IFS= read -r line; do
+              # Replace {{version}} with actual version
+              line=$(echo "$line" | sed "s/{{version}}/$RELEASE_VERSION/g")
+              # Replace {{branch}} with branch name
+              line=$(echo "$line" | sed "s/{{branch}}/$BRANCH_NAME/g")
+              # Add more placeholder replacements as needed
+              
+              BUILD_ARGS="${BUILD_ARGS}${line}\n"
+            done <<< "$BUILD_ARGS_TEMP"
+            
+            # Store in output
+            echo "build_args<<EOF" >> $GITHUB_OUTPUT
+            echo -e "$BUILD_ARGS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            
+            echo "✅ Build arguments processed with placeholders: ${BUILD_ARGS_INPUT}"
+          else
+            # No build args provided
+            echo "build_args=" >> $GITHUB_OUTPUT
+            echo "ℹ️ No build arguments provided"
+          fi
+
+      - name: Summarize Configuration
+        run: |
+          echo "📋 Build Configuration Summary"
+          echo "----------------------------"
+          echo "🏷️ Version: ${{ steps.set_version.outputs.version }} (Source: ${{ steps.set_version.outputs.version_source }})"
+          echo "🔄 Image: ${{ steps.store_inputs.outputs.image_name }}"
+          echo "📄 Dockerfile: ${{ steps.store_inputs.outputs.dockerfile_path }}"
+          echo "🌐 Platforms: ${{ steps.store_inputs.outputs.build_platforms }}"
+          echo "🔖 Branch: ${{ steps.branches.outputs.branch_name }}"
+          echo "🚀 Release Branch: ${{ steps.store_inputs.outputs.release_branch }} (${{ steps.branches.outputs.is_release_branch == 'true' && '✓ matched' || '✗ not matched' }})"
+          echo "🔄 Trigger: ${{ github.event_name }}"
+          echo ""
+          echo "📦 Distribution Channels"
+          echo "----------------------------"
+          echo "🐳 Docker Hub Pulling: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "🐳 Docker Hub Publishing: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && steps.extract_docker_publish_config.outputs.has_config == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "☁️ Google Cloud: ${{ steps.extract_gcp_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo ""
+          echo "⚙️ Workflow Execution Plan"
+          echo "----------------------------"
+          echo "🔍 Build & Scan: ✅ Always runs"
+
+          # GitHub Release - only on release branches
+          if [[ "${{ steps.branches.outputs.is_release_branch }}" == "true" ]]; then
+            echo "📦 GitHub Release: ✅ Will run (release branch)"
+          else
+            echo "📦 GitHub Release: ❌ Will not run (not a release branch)"
+          fi
+
+          # Docker Hub Release - only on release branches with credentials
+          if [[ "${{ steps.branches.outputs.is_release_branch }}" == "true" && \
+                "${{ steps.extract_docker_creds.outputs.has_credentials }}" == "true" && \
+                "${{ steps.extract_docker_publish_config.outputs.has_config }}" == "true" ]]; then
+            echo "🐳 Docker Hub Release: ✅ Will run (release branch with credentials)"
+          else
+            echo "🐳 Docker Hub Release: ❌ Will not run"
+          fi
+
+          # GCP Release - on release branches or manual trigger with credentials
+          if [[ ("${{ steps.branches.outputs.is_release_branch }}" == "true" || \
+                "${{ github.event_name }}" == "workflow_dispatch") && \
+                "${{ steps.extract_gcp_creds.outputs.has_credentials }}" == "true" ]]; then
+            echo "☁️ GCP Release: ✅ Will run"
+          else
+            echo "☁️ GCP Release: ❌ Will not run"
+          fi
+
+          # Slack Notification - only on release branches with webhook
+          if [[ "${{ steps.branches.outputs.is_release_branch }}" == "true" && \
+                "${{ steps.extract_slack_webhook.outputs.has_webhook }}" == "true" ]]; then
+            echo "📢 Slack Notification: ✅ Will run (release branch with webhook)"
+          else
+            echo "📢 Slack Notification: ❌ Will not run"
+          fi
+
+          echo ""
+          echo "Additional Configurations"
+          echo "----------------------------"
+          echo "Slack Webhook: ${{ steps.extract_slack_webhook.outputs.has_webhook == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "Security Scan: ${{ steps.store_inputs.outputs.enable_security_scan == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "Security Upload: ${{ steps.store_inputs.outputs.enable_security_upload == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo ""
+
+  control-gate:
+    runs-on: ubuntu-24.04
+    needs: [config]
+    if: always() && success()
+    env:
+      RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+    steps:
+      - name: Release branch protection
+        run: |
+          echo "Checking workflow event type..."
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Event: workflow_dispatch (manual trigger)"
+            echo "Checking if branch is release branch..."
+            
+            if [[ "${{ env.CURRENT_BRANCH }}" == "${{ env.RELEASE_BRANCH }}" ]]; then
+              echo "::error:: Branch: ${{ env.RELEASE_BRANCH }} (release branch). Stopping workflow."
+              exit 1
+            else
+              echo "Branch: ${{ env.CURRENT_BRANCH }} (not release branch). Proceeding with workflow."
+            fi
+          else
+            echo "Event: ${{ github.event_name }} (not manual trigger). Proceeding with workflow."
+          fi
+
+  build-and-scan:
+    runs-on: ubuntu-24.04
+    needs: [config, control-gate]
+    if: needs.control-gate.result == 'success' || needs.control-gate.result == 'skipped'
+    env:
+      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+      ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
+      ENABLE_SECURITY_UPLOAD: ${{ needs.config.outputs.enable_security_upload }}
+      DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
+      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+      DOCKER_TOKEN: ${{ secrets.docker_token }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+    steps:
+      # Delete huge unnecessary tools folder to save space needed for docker build
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Log in to Docker Hub
+        if: env.DOCKER_HAS_CREDENTIALS == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_LOGIN }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Test Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/amd64
+          push: false
+          load: false
+          no-cache: false
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+      - name: Single Arch Build Load
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          no-cache: false
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
+            sudo sh -s -- -b /usr/local/bin
+          echo "✅ Trivy installed successfully"
+
+      - name: Generate SBOM with Retry Logic
+        id: generate-sbom
+        run: |
+          export TRIVY_DISABLE_VEX_NOTICE=true
+          max_retries=5
+          attempt=1
+          success=false
+          while [ $attempt -le $max_retries ]; do
+            echo "🔄 Generating SBOM, attempt $attempt..."
+            trivy image --format spdx-json --output sbom.json ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+            if [ $? -eq 0 ]; then
+              echo "✅ SBOM generation successful"
+              success=true
+              break
+            else
+              echo "⚠️ Retry in 60 seconds..."
+              sleep 60
+              attempt=$((attempt+1))
+            fi
+          done
+          if [ "$success" = false ]; then
+            echo "❌ SBOM generation failed after $max_retries attempts"
+            exit 1
+          fi
+
+      - name: Scan Docker Image for Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        if: ${{ env.ENABLE_SECURITY_SCAN != 'false' }}
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
+          exit-code: "0"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Vulnerability Scan Results
+        uses: github/codeql-action/upload-sarif@v4
+        if: ${{ env.ENABLE_SECURITY_SCAN != 'false' && env.ENABLE_SECURITY_UPLOAD != 'false' && env.IS_RELEASE_BRANCH == 'true' }}
+        with:
+          sarif_file: "trivy-results.sarif"
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: sbom
+          path: sbom.json
+
+  github-release:
+    runs-on: ubuntu-24.04
+    needs: [config, build-and-scan]
+    if: |
+      always() &&
+      success() &&
+      needs.config.outputs.is_release_branch == 'true'
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download SBOM Artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: sbom
+          path: ./
+
+      - name: Check for changes.md
+        id: check_changelog
+        run: |
+          if [ -f "./changes.md" ]; then
+            echo "has_changelog=true" >> $GITHUB_OUTPUT
+            echo "📖 Found changes.md file"
+          else
+            echo "has_changelog=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes.md file found, will generate changelog from git history"
+          fi
+
+      - name: Parse Changelog from changes.md
+        id: parse_changelog
+        if: steps.check_changelog.outputs.has_changelog == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { open } = require('fs/promises');
+            const fs = require('fs');
+
+            const version = '${{ env.RELEASE_VERSION }}';
+            const delimiter = '### ';
+            const file = await open('./changes.md');
+
+            let description = [];
+            let found = false;
+
+            for await (let line of file.readLines()) {
+              line = line.trim();
+              
+              if (line.startsWith(`${delimiter}${version}`)) {
+                found = true;
+                continue;
+              }
+              
+              if (!found) continue;
+              if (line.startsWith(delimiter)) break;
+
+              description.push(line);
+            }
+
+            if (description.length) {
+              const content = description.join('\n');
+              fs.writeFileSync('changelog.txt', content);
+              core.setOutput('has_description', 'true');
+              console.log(`✅ Found changelog entry for version ${version}`);
+            } else {
+              core.setOutput('has_description', 'false');
+              console.log(`⚠️ No changelog entry found for version ${version}`);
+            }
+
+      - name: Generate Changelog from Git History
+        id: git_changelog
+        if: steps.check_changelog.outputs.has_changelog != 'true' || steps.parse_changelog.outputs.has_description != 'true'
+        run: |
+          echo "🔄 Generating changelog from git history..."
+
+          # Check if this is the first tag
+          if [ "$(git tag | wc -l)" -eq "0" ]; then
+            echo "ℹ️ This is the first tag, using all commits"
+            REFERENCE=""
+          else
+            # Get the most recent tag
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            
+            if [ -z "$LAST_TAG" ]; then
+              echo "ℹ️ No previous tags found, using all commits"
+              REFERENCE=""
+            else
+              echo "ℹ️ Using commits since $LAST_TAG"
+              REFERENCE=$LAST_TAG
+            fi
+          fi
+
+          # Generate changelog with simple formatting - no header
+          # Get commits since last tag (just the commit message without hash)
+          # Exclude merge commits
+          git log $REFERENCE..HEAD --no-merges --pretty=format:"- %s" > changelog.txt
+
+          # Check if changelog is empty
+          if [ ! -s changelog.txt ]; then
+            echo "ℹ️ No changes found, adding placeholder"
+            echo "- Initial release" > changelog.txt
+          fi
+
+          echo "✅ Changelog generated from git history"
+
+      - name: Configure Git for Tagging
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Create GitHub Tag
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git tag ${{ env.RELEASE_VERSION }}
+          git push origin ${{ env.RELEASE_VERSION }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: ${{ env.RELEASE_VERSION }}
+          body_path: changelog.txt
+          prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
+          files: sbom.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  docker-hub-release:
+    runs-on: ubuntu-24.04
+    needs: [config, github-release]
+    if: |
+      always() &&
+      success() &&
+      needs.config.outputs.docker_has_credentials == 'true' &&
+      needs.config.outputs.docker_has_publish_config == 'true' &&
+      needs.config.outputs.is_release_branch == 'true'
+    permissions:
+      contents: write
+    env:
+      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+      DOCKER_PASSWORD: ${{ secrets.docker_token }}
+      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      BUILD_PLATFORMS: ${{ needs.config.outputs.build_platforms }}
+      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Log in
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_LOGIN }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Prepare tags
+        run: |
+          echo "🔄 Preparing Docker Hub tags..."
+          # For release branch, use both semantic version and latest tag
+          TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
+          echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "✅ Docker Hub tags prepared: $TAGS"
+
+      - name: Push Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          sbom: true
+          provenance: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.DOCKER_TAGS }}
+
+      - name: Log out
+        run: docker logout
+
+  google-cloud-release:
+    runs-on: ubuntu-24.04
+    needs: [config, build-and-scan, github-release]
+    if: |
+      always() &&
+      needs.config.outputs.gcp_has_credentials == 'true' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
+      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BUILD_PLATFORM: "amd64"
+      DOCKER_USERNAME: ${{ needs.config.outputs.docker_login }}
+      DOCKER_PASSWORD: ${{ secrets.docker_token }}
+      DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
+      GCP_REGION: ${{ needs.config.outputs.gcp_region }}
+      GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
+      GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Docker Hub
+        if: env.DOCKER_HAS_CREDENTIALS == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: "${{ secrets.gcp_credentials }}"
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      # Create safe branch name for feature branches
+      - name: Create safe branch name
+        if: env.IS_RELEASE_BRANCH == 'false'
+        run: |
+          # Create safe branch name by replacing slashes with dashes
+          SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
+          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+
+      # Delete existing images to prevent orphaned resources
+      - name: Delete existing images in Artifact Registry
+        if: env.IS_RELEASE_BRANCH == 'false'
+        # Skip for production builds which use semantic versioning
+        run: |
+          echo "🔄 Checking for existing feature branch images..."
+          # Define variables
+          IMAGE_PATH="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}"
+          TAG="${{ env.SAFE_BRANCH_NAME }}"
+
+          echo "ℹ️ Looking for tag: ${TAG} in ${IMAGE_PATH}"
+
+          # Get the digest for the tag using tags list command
+          DIGEST=$(gcloud artifacts docker tags list ${IMAGE_PATH} | grep -w "${TAG}" | awk '{print $3}' 2>/dev/null || echo "")
+
+          if [ -n "${DIGEST}" ]; then
+            echo "ℹ️ Found existing image with digest: ${DIGEST}"
+
+            # Delete the image by digest
+            echo "🗑️ Deleting previous image by digest..."
+            gcloud artifacts docker images delete ${IMAGE_PATH}@${DIGEST} --delete-tags --quiet
+
+            echo "✅ Previous image deletion completed"
+          else
+            echo "ℹ️ No previous image found with tag ${TAG}"
+          fi
+
+      # Prepare GCP Docker tags based on branch and settings
+      - name: Prepare GCP Docker tags
+        id: prepare_gcp_tags
+        run: |
+          echo "🔄 Preparing GCP Docker tags..."
+          # Set tags based on branch
+          if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
+            # Production release - use semantic version and latest tag
+            TAGS="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }},${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}:latest"
+            echo "ℹ️ Production release: Adding both version and latest tags"
+          else
+            # Feature branch build - only use branch name tag
+            TAGS="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}:${{ env.SAFE_BRANCH_NAME }}"
+            echo "ℹ️ Feature branch build: Using branch name tag only"
+          fi
+
+          echo "GCP_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "✅ GCP Tags prepared: $TAGS"
+
+      - name: Push Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.GCP_DOCKER_TAGS }}
+
+      - name: Log out from Google Cloud
+        run: docker logout
+
+  notify:
+    runs-on: ubuntu-24.04
+    needs: [config, github-release, docker-hub-release, google-cloud-release]
+    if: |
+      always() && 
+      needs.config.outputs.has_slack_webhook == 'true' &&
+      needs.github-release.result == 'success' &&
+      (needs.docker-hub-release.result == 'success' || needs.docker-hub-release.result == 'skipped') &&
+      (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped')  &&
+      needs.config.outputs.is_release_branch == 'true'
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+      GITHUB_REPO: ${{ github.repository }}
+      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+      GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
+      GCP_REGION: ${{ needs.config.outputs.gcp_region }}
+      GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+      DOCKER_ENABLED: ${{ needs.config.outputs.docker_has_publish_config }}
+      GCP_ENABLED: ${{ needs.config.outputs.gcp_has_credentials }}
+    steps:
+      - name: Generate notification message
+        id: generate_message
+        run: |
+          echo "🔄 Generating notification message..."
+
+          # Create simplified JSON payload for Slack notification using a more reliable approach
+          cat << EOF > payload.json
+          {
+            "text": "🚀 New release of ${IMAGE_NAME} v${RELEASE_VERSION} is available!",
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                  "type": "plain_text",
+                  "text": "🚀 New Release Available"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*${IMAGE_NAME}* version *${RELEASE_VERSION}* has been released."
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Release Links:*\n• <https://github.com/${GITHUB_REPO}/releases/tag/${RELEASE_VERSION}|GitHub Release>"
+                }
+              }
+            ]
+          }
+          EOF
+
+          # Add Docker Hub link if enabled
+          if [ "$DOCKER_ENABLED" = "true" ]; then
+            jq '.blocks[2].text.text += "\n• <https://hub.docker.com/r/'"$DOCKER_ORG"'/'"$DOCKER_REPO"'/tags|Docker Hub Image>"' payload.json > payload.tmp && mv payload.tmp payload.json
+          fi
+
+          # Add GCP link if enabled
+          if [ "$GCP_ENABLED" = "true" ]; then
+            jq '.blocks[2].text.text += "\n• <https://console.cloud.google.com/artifacts/docker/'"$GCP_PROJECT_ID"'/'"$GCP_REGION"'/'"$GCP_REPO"'/'"$IMAGE_NAME"'|Google Cloud Artifact Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
+          fi
+
+          # Store payload in output
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          cat payload.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "✅ Notification message generated"
+
+      - name: Send notification
+        uses: slackapi/slack-github-action@v2
+        with:
+          payload: ${{ steps.generate_message.outputs.payload }}
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
