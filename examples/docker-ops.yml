@@ -1,0 +1,83 @@
+name: Docker Release Example
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ===========================================================================
+  # Example 1: Minimal - GitHub Release Only
+  # ===========================================================================
+  # Creates GitHub release with SBOM. No external registries.
+
+  # minimal:
+  #   uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+  #   with:
+  #     image_name: my-app
+
+  # ===========================================================================
+  # Example 2: Docker Hub Publishing
+  # ===========================================================================
+  # Publishes to Docker Hub with version and latest tags
+
+  # docker-hub:
+  #   uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+  #   with:
+  #     image_name: my-app
+  #     docker_login: myusername
+  #     docker_org: myorg
+  #     docker_repo: my-app
+  #   secrets:
+  #     docker_token: ${{ secrets.DOCKER_TOKEN }}
+
+  # ===========================================================================
+  # Example 3: Multi-Registry (Docker Hub + GCP + Slack)
+  # ===========================================================================
+
+  multi-registry:
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: my-app
+      release_branch: main
+
+      # Docker Hub
+      docker_login: ${{ vars.DOCKER_USERNAME }}
+      docker_org: myorg
+      docker_repo: my-app
+
+      # GCP Artifact Registry
+      gcp_region: us-central1
+      gcp_project_id: my-gcp-project
+      gcp_repo: docker-images
+
+      # Optional: Custom build settings
+      # dockerfile_path: ./Dockerfile
+      # build_platforms: linux/amd64,linux/arm64
+      # build_args: VERSION={{version}},ENV=production
+
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
+      gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+# ===========================================================================
+# Quick Reference
+# ===========================================================================
+#
+# Versioning:
+#   - Auto-detected from package.json or GitVersion (ci/git-version.yml)
+#
+# Placeholders in build_args:
+#   - {{version}} = release version
+#   - {{branch}} = current branch name
+#
+# Secrets Setup:
+#   - DOCKER_TOKEN: https://hub.docker.com/settings/security
+#   - GCP_CREDENTIALS: Service account JSON with Artifact Registry Writer
+#   - SLACK_WEBHOOK_URL: https://api.slack.com/messaging/webhooks
+#
+# Changelog:
+#   - Create changes.md with version entries (### 1.2.0)
+#   - Or auto-generated from git commits
+#
+# See docs/docker-ops.md for full documentation
