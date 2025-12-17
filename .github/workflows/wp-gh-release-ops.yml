@@ -21,10 +21,9 @@ permissions:
   contents: write
 
 env:
-  TAG: ${{ github.event.inputs.tag }}
-  VERSION: ${{ github.event.inputs.version }}
-  PRETAG: ${{ github.event.inputs.prerelease }}
-  BRANCH: temp-release-${{ github.event.inputs.release }}
+  TAG: ${{ inputs.tag }}
+  VERSION: ${{ inputs.version }}
+  PRETAG: ${{ inputs.prerelease }}
 
 jobs:
   build:
@@ -112,8 +111,8 @@ jobs:
           rm -rf vendor/bin || true
           rm -rf vendor/composer/installers || true
           find ./ -name '.git*' -not -path './.git' -type f -delete || true
-          find ./ -name '.git*' -not -path './.git' -type d -exec rm -rf {} \; || true
-          find ./vendor -name .svn -exec rm -rf {} \; || true
+          find ./ -name '.git*' -not -path './.git' -type d -prune -exec rm -rf {} \; || true
+          find ./vendor -name .svn -type d -prune -exec rm -rf {} \; || true
 
       # cleanup files, specific to Google API PHP library
       - name: Cleanup files for Google API library
@@ -121,7 +120,7 @@ jobs:
           rm -f lib/Google/phpstan.neon.dist || true
           rm -f lib/Google/vendor/paragonie/random_compat/build-phar.sh || true
           find ./lib/Google/ -name '.repo-metadata.json' -type f -delete || true
-          find ./lib/Google/vendor -name .svn -exec rm -rf '{}' \; || true
+          find ./lib/Google/vendor -name .svn -type d -prune -exec rm -rf '{}' \; || true
 
       # commit changes to temporary release branch and create a new tag
       - name: Commit changes
@@ -140,17 +139,16 @@ jobs:
           output-file: sbom.spdx.json
           format: spdx-json
 
-      # create a draft release with the version changelog as a description
+      # create and publish release
+      # using version changelog as release notes
+      # attach SBOM as artifact
       - name: Create and Publish Release
-        id: draft_release
         uses: softprops/action-gh-release@v2
         with:
           name: "Release ${{ steps.vars.outputs.version }}"
           body: "${{ steps.changelog.outputs.description }}"
           tag_name: ${{ steps.vars.outputs.full_tag }}
-          draft: false
           prerelease: ${{ steps.vars.outputs.is_prerelease }}
-          # generate_release_notes: false
           files: sbom.spdx.json
 
       # delete tag if there was an error
