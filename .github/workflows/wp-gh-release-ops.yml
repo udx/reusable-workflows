@@ -1,0 +1,164 @@
+name: Publish WP Plugin Release on GitHub
+run-name: Publish WP Plugin Release on GitHub
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. 1.2.3a)'
+        required: true
+        type: string
+      version:
+        description: 'Release version (e.g. 1.2.3), default: latest'
+        required: false
+        type: string
+      prerelease:
+        description: 'Pre-release version (e.g. RC1, beta, etc...)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ inputs.tag }}
+  VERSION: ${{ inputs.version }}
+  PRETAG: ${{ inputs.prerelease }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 'ref' and 'repository' are required, otherwise repo could appear in detached head state
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          repository: ${{ github.repository }}
+
+      # Prepare variables
+      - name: Prepare vars
+        id: vars
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+
+            let version = process.env.VERSION;
+            
+            // If VERSION is empty, read from readme.txt
+            if (!version) {
+              const readmeContent = fs.readFileSync('./readme.txt', 'utf8');
+              const stableTagMatch = readmeContent.match(/^Stable tag:\s*(.+)$/m);
+              if (stableTagMatch) {
+                version = stableTagMatch[1].trim();
+                console.log(`Version extracted from readme.txt: ${version}`);
+              } else {
+                core.setFailed('VERSION is empty and could not extract version from readme.txt');
+              }
+            }
+
+            const full_tag = [
+              process.env.TAG,
+              process.env.PRETAG
+            ].filter(Boolean).join('-');
+            const branch = `temp-release-${full_tag}`;
+            const is_prerelease = !!process.env.PRETAG;
+
+            core.setOutput('full_tag', full_tag );
+            core.setOutput('branch', branch );
+            core.setOutput('version', version );
+            core.setOutput('is_prerelease', is_prerelease );
+        
+      - name: Parse Changelog Entries
+        uses: actions/github-script@v8
+        id: changelog
+        with:
+          script: |
+            const { open } = require('fs/promises');
+
+            const version = '${{ steps.vars.outputs.version }}';
+            const delimiter = '#### ';
+            const file = await open('./changes.md');
+
+            let description = [];
+            let found = false;
+
+            for await (let line of file.readLines()) {
+              line = line.trim();
+              
+              if ( line.startsWith(`${delimiter}${version}`) ) {
+                found = true;
+                continue;
+              }
+              
+              if (!found) continue;
+              if ( line.startsWith(delimiter) )  break;
+
+              description.push(line);
+            }
+
+            if ( !description.length ) core.setFailed(`Release ${version} not found in the changelog!`);
+
+            core.setOutput('description', description.join('\n') );
+
+      # cleanup files that are not needed for the release
+      # but keep the .git folder, because we need it for the next step
+      - name: Cleanup files
+        run: |
+          rm -f composer.lock || true
+          rm -rf tests || true
+          rm -rf vendor/bin || true
+          rm -rf vendor/composer/installers || true
+          find ./ -name '.git*' -not -path './.git' -type f -delete || true
+          find ./ -name '.git*' -not -path './.git' -type d -prune -exec rm -rf {} \; || true
+          find ./vendor -name .svn -type d -prune -exec rm -rf {} \; || true
+
+      # cleanup files, specific to Google API PHP library
+      - name: Cleanup files for Google API library
+        run: |
+          rm -f lib/Google/phpstan.neon.dist || true
+          rm -f lib/Google/vendor/paragonie/random_compat/build-phar.sh || true
+          find ./lib/Google/ -name '.repo-metadata.json' -type f -delete || true
+          find ./lib/Google/vendor -name .svn -type d -prune -exec rm -rf '{}' \; || true
+
+      # commit changes to temporary release branch and create a new tag
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: Cleanup files for release
+          new_branch: ${{ steps.vars.outputs.branch }}
+          tag: ${{ steps.vars.outputs.full_tag }}
+
+      # generate SBOM that will be attached to a release as an artifact
+      - name: Create SBOM
+        id: sbom
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          output-file: sbom.spdx.json
+          format: spdx-json
+
+      # create and publish release
+      # using version changelog as release notes
+      # attach SBOM as artifact
+      - name: Create and Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ steps.vars.outputs.version }}"
+          body: "${{ steps.changelog.outputs.description }}"
+          tag_name: ${{ steps.vars.outputs.full_tag }}
+          prerelease: ${{ steps.vars.outputs.is_prerelease }}
+          files: sbom.spdx.json
+
+      # delete tag if there was an error
+      - name: Delete tag on failure
+        if: failure()
+        run: |
+          git push origin --delete refs/tags/${{ steps.vars.outputs.full_tag }} || true
+
+      # delete temporary release branch
+      - name: Delete temporary release branch
+        if: always()
+        run: |
+          git push origin --delete ${{ steps.vars.outputs.branch }} || true
