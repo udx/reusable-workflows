@@ -16,6 +16,7 @@ Workflows in this repository are:
 | Workflow                                               | Description                                                                                            | Documentation                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
 | **[docker-ops.yml](.github/workflows/docker-ops.yml)** | Build, scan, and publish Docker images to Docker Hub and GCP Artifact Registry with security scanning. | [Docs](docs/docker-ops.md) · [Examples](examples/docker-ops.yml) |
+| **[wp-gh-release-ops.yml](.github/workflows/wp-gh-release-ops.yml)** | Generate and publish WordPress plugin release on GitHub. | [Docs](docs/wp-gh-release-ops.md) · [Examples](examples/wp-gh-release-ops.yml) |
 
 ## License
 
