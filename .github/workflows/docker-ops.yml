@@ -20,6 +20,14 @@ on:
         description: "GCP Artifact Registry repository name"
         required: false
         type: string
+      acr_registry:
+        description: "Azure Container Registry name (e.g., myregistry.azurecr.io)"
+        required: false
+        type: string
+      acr_repository:
+        description: "ACR repository name"
+        required: false
+        type: string
       release_branch:
         description: "Branch name that triggers releases"
         required: false
@@ -74,6 +82,9 @@ on:
       gcp_credentials:
         description: "GCP service account credentials JSON"
         required: false
+      acr_credentials:
+        description: "Azure service principal credentials JSON"
+        required: false
 
       slack_webhook_url:
         description: "Slack webhook URL for notifications"
@@ -103,6 +114,11 @@ jobs:
       gcp_region: ${{ steps.extract_gcp_creds.outputs.gcp_region }}
       gcp_project_id: ${{ steps.extract_gcp_creds.outputs.gcp_project_id }}
       gcp_repo: ${{ steps.extract_gcp_creds.outputs.gcp_repo }}
+
+      # ACR configuration
+      acr_has_credentials: ${{ steps.extract_acr_creds.outputs.has_credentials }}
+      acr_registry: ${{ steps.extract_acr_creds.outputs.acr_registry }}
+      acr_repository: ${{ steps.extract_acr_creds.outputs.acr_repository }}
 
       # Build configuration
       image_name: ${{ steps.store_inputs.outputs.image_name }}
@@ -134,6 +150,10 @@ jobs:
           echo "gcp_region=${{ inputs.gcp_region }}" >> $GITHUB_OUTPUT
           echo "gcp_project_id=${{ inputs.gcp_project_id }}" >> $GITHUB_OUTPUT
           echo "gcp_repo=${{ inputs.gcp_repo }}" >> $GITHUB_OUTPUT
+
+          # Store ACR inputs
+          echo "acr_registry=${{ inputs.acr_registry }}" >> $GITHUB_OUTPUT
+          echo "acr_repository=${{ inputs.acr_repository }}" >> $GITHUB_OUTPUT
 
           # Store security upload setting
           echo "enable_security_scan=${{ inputs.enable_security_scan }}" >> $GITHUB_OUTPUT
@@ -347,6 +367,62 @@ jobs:
             echo "⚠️ Missing GCP parameters:${MISSING_PARAMS%,}"
           fi
 
+      - name: Extract and Check ACR Credentials
+        id: extract_acr_creds
+        run: |
+          echo "🔄 Checking ACR credentials and configuration..."
+          # Get inputs from store_inputs step
+          ACR_REGISTRY="${{ steps.store_inputs.outputs.acr_registry }}"
+          ACR_REPOSITORY="${{ steps.store_inputs.outputs.acr_repository }}"
+
+          # Define parameter map for validation
+          declare -A params=(
+            [acr_registry]="$ACR_REGISTRY"
+            [acr_repository]="$ACR_REPOSITORY"
+          )
+
+          # Set ACR credentials check directly
+          HAS_ACR_CREDS="${{ secrets.acr_credentials != '' }}"
+
+          # Log the status
+          if [ "$HAS_ACR_CREDS" = "true" ]; then
+            echo "ℹ️ ACR credentials found"
+          else
+            echo "⚠️ ACR credentials not found"
+          fi
+
+          # Initialize variables
+          ALL_PARAMS_SET=true
+          MISSING_PARAMS=""
+
+          # Check each parameter
+          for param in "${!params[@]}"; do
+            if [ -n "${params[$param]}" ]; then
+              # Parameter is set, add to output
+              echo "$param=${params[$param]}" >> $GITHUB_OUTPUT
+              echo "ℹ️ ACR $param: ${params[$param]}"
+            else
+              # Parameter is missing
+              ALL_PARAMS_SET=false
+              MISSING_PARAMS="$MISSING_PARAMS $param,"
+            fi
+          done
+
+          # Add ACR credentials to validation
+          if [ "$HAS_ACR_CREDS" != "true" ]; then
+            ALL_PARAMS_SET=false
+            MISSING_PARAMS="$MISSING_PARAMS ACR Credentials,"
+          fi
+
+          # Set has_credentials output
+          if [ "$ALL_PARAMS_SET" = true ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "✅ ACR credentials and configuration complete"
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Missing ACR parameters:${MISSING_PARAMS%,}"
+          fi
+
       - name: Extract and Check Slack Webhook
         id: extract_slack_webhook
         run: |
@@ -416,6 +492,7 @@ jobs:
           echo "🐳 Docker Hub Pulling: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
           echo "🐳 Docker Hub Publishing: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && steps.extract_docker_publish_config.outputs.has_config == 'true' && '✅ enabled' || '❌ disabled' }}"
           echo "☁️ Google Cloud: ${{ steps.extract_gcp_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "💠 Azure Container Registry: ${{ steps.extract_acr_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
           echo ""
           echo "⚙️ Workflow Execution Plan"
           echo "----------------------------"
@@ -444,6 +521,15 @@ jobs:
             echo "☁️ GCP Release: ✅ Will run"
           else
             echo "☁️ GCP Release: ❌ Will not run"
+          fi
+
+          # ACR Release - on release branches or manual trigger with credentials
+          if [[ ("${{ steps.branches.outputs.is_release_branch }}" == "true" || \
+                "${{ github.event_name }}" == "workflow_dispatch") && \
+                "${{ steps.extract_acr_creds.outputs.has_credentials }}" == "true" ]]; then
+            echo "💠 ACR Release: ✅ Will run"
+          else
+            echo "💠 ACR Release: ❌ Will not run"
           fi
 
           # Slack Notification - only on release branches with webhook
@@ -916,15 +1002,139 @@ jobs:
       - name: Log out from Google Cloud
         run: docker logout
 
+  azure-container-registry-release:
+    runs-on: ubuntu-24.04
+    needs: [config, build-and-scan, github-release]
+    if: |
+      always() &&
+      needs.config.outputs.acr_has_credentials == 'true' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
+      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BUILD_PLATFORM: "amd64"
+      DOCKER_USERNAME: ${{ needs.config.outputs.docker_login }}
+      DOCKER_PASSWORD: ${{ secrets.docker_token }}
+      DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
+      ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
+      ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
+      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Docker Hub
+        if: env.DOCKER_HAS_CREDENTIALS == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Authenticate with Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.acr_credentials }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name $(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+
+      # Create safe branch name for feature branches
+      - name: Create safe branch name
+        if: env.IS_RELEASE_BRANCH == 'false'
+        run: |
+          # Create safe branch name by replacing slashes with dashes
+          SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
+          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+
+      # Delete existing images to prevent orphaned resources
+      - name: Delete existing images in ACR
+        if: env.IS_RELEASE_BRANCH == 'false'
+        # Skip for production builds which use semantic versioning
+        run: |
+          echo "🔄 Checking for existing feature branch images..."
+          # Define variables
+          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+          REPOSITORY="${{ env.ACR_REPOSITORY }}"
+          TAG="${{ env.SAFE_BRANCH_NAME }}"
+
+          echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
+
+          # Check if the tag exists
+          TAG_EXISTS=$(az acr repository show-tags --name ${REGISTRY_NAME} --repository ${REPOSITORY} --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
+
+          if [ -n "${TAG_EXISTS}" ]; then
+            echo "ℹ️ Found existing image with tag: ${TAG}"
+
+            # Delete the image by tag
+            echo "🗑️ Deleting previous image by tag..."
+            az acr repository delete --name ${REGISTRY_NAME} --image ${REPOSITORY}:${TAG} --yes
+
+            echo "✅ Previous image deletion completed"
+          else
+            echo "ℹ️ No previous image found with tag ${TAG}"
+          fi
+
+      # Prepare ACR Docker tags based on branch and settings
+      - name: Prepare ACR Docker tags
+        id: prepare_acr_tags
+        run: |
+          echo "🔄 Preparing ACR Docker tags..."
+          # Set tags based on branch
+          if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
+            # Production release - use semantic version and latest tag
+            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.RELEASE_VERSION }},${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:latest"
+            echo "ℹ️ Production release: Adding both version and latest tags"
+          else
+            # Feature branch build - only use branch name tag
+            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.SAFE_BRANCH_NAME }}"
+            echo "ℹ️ Feature branch build: Using branch name tag only"
+          fi
+
+          echo "ACR_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "✅ ACR Tags prepared: $TAGS"
+
+      - name: Push Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/${{ env.BUILD_PLATFORM }}
+          push: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.ACR_DOCKER_TAGS }}
+
+      - name: Log out from Azure Container Registry
+        run: docker logout ${{ env.ACR_REGISTRY }}
+
   notify:
     runs-on: ubuntu-24.04
-    needs: [config, github-release, docker-hub-release, google-cloud-release]
+    needs:
+      [
+        config,
+        github-release,
+        docker-hub-release,
+        google-cloud-release,
+        azure-container-registry-release,
+      ]
     if: |
       always() && 
       needs.config.outputs.has_slack_webhook == 'true' &&
       needs.github-release.result == 'success' &&
       (needs.docker-hub-release.result == 'success' || needs.docker-hub-release.result == 'skipped') &&
-      (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped')  &&
+      (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
+      (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
       needs.config.outputs.is_release_branch == 'true'
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
@@ -936,8 +1146,11 @@ jobs:
       GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
       GCP_REGION: ${{ needs.config.outputs.gcp_region }}
       GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+      ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
+      ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
       DOCKER_ENABLED: ${{ needs.config.outputs.docker_has_publish_config }}
       GCP_ENABLED: ${{ needs.config.outputs.gcp_has_credentials }}
+      ACR_ENABLED: ${{ needs.config.outputs.acr_has_credentials }}
     steps:
       - name: Generate notification message
         id: generate_message
@@ -982,6 +1195,12 @@ jobs:
           # Add GCP link if enabled
           if [ "$GCP_ENABLED" = "true" ]; then
             jq '.blocks[2].text.text += "\n• <https://console.cloud.google.com/artifacts/docker/'"$GCP_PROJECT_ID"'/'"$GCP_REGION"'/'"$GCP_REPO"'/'"$IMAGE_NAME"'|Google Cloud Artifact Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
+          fi
+
+          # Add ACR link if enabled
+          if [ "$ACR_ENABLED" = "true" ]; then
+            REGISTRY_NAME=$(echo "$ACR_REGISTRY" | cut -d'.' -f1)
+            jq '.blocks[2].text.text += "\n• <https://portal.azure.com/#view/Microsoft_Azure_ContainerRegistries/RepositoryBlade/id/%2Fsubscriptions%2F~%2FresourceGroups%2F~%2Fproviders%2FMicrosoft.ContainerRegistry%2Fregistries%2F'"$REGISTRY_NAME"'/repository/'"$ACR_REPOSITORY"'|Azure Container Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
           fi
 
           # Store payload in output

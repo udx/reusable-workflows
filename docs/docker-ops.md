@@ -6,7 +6,7 @@ Reusable workflow for building, scanning, and publishing Docker images to multip
 
 - Multi-platform builds (amd64, arm64)
 - Security scanning with Trivy + SBOM generation
-- Publish to Docker Hub and/or GCP Artifact Registry
+- Publish to Docker Hub, GCP Artifact Registry, and/or Azure Container Registry
 - Slack notifications
 - Automatic versioning (package.json or GitVersion)
 
@@ -46,6 +46,9 @@ jobs:
 | `gcp_region`              | GCP region (e.g., `us-central1`)   | -                         | For GCP        |
 | `gcp_project_id`          | GCP project ID                     | -                         | For GCP        |
 | `gcp_repo`                | Artifact Registry repo name        | -                         | For GCP        |
+| **Azure Container Registry** |
+| `acr_registry`            | ACR registry name (e.g., `myregistry.azurecr.io`) | -              | For ACR        |
+| `acr_repository`          | ACR repository name                | -                         | For ACR        |
 | **Build**                 |
 | `release_branch`          | Branch that triggers releases      | `latest`                  |                |
 | `dockerfile_path`         | Path to Dockerfile                 | `./Dockerfile`            |                |
@@ -58,11 +61,12 @@ jobs:
 
 ### Secrets
 
-| Secret              | Description              | Required       |
-| ------------------- | ------------------------ | -------------- |
-| `docker_token`      | Docker Hub token         | For Docker Hub |
-| `gcp_credentials`   | GCP service account JSON | For GCP        |
-| `slack_webhook_url` | Slack webhook URL        | For Slack      |
+| Secret              | Description                          | Required       |
+| ------------------- | ------------------------------------ | -------------- |
+| `docker_token`      | Docker Hub token                     | For Docker Hub |
+| `gcp_credentials`   | GCP service account JSON             | For GCP        |
+| `acr_credentials`   | Azure service principal JSON         | For ACR        |
+| `slack_webhook_url` | Slack webhook URL                    | For Slack      |
 
 ## Versioning
 
@@ -85,6 +89,7 @@ Example: `build_args: "VERSION={{version}},ENV=production"`
 | **GitHub Release** | Release branch           | Version tag                                              | None                                                          |
 | **Docker Hub**     | Release branch           | `version`, `latest`                                      | `docker_login`, `docker_org`, `docker_repo`, `docker_token`   |
 | **GCP**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_credentials` |
+| **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `acr_credentials`           |
 | **Slack**          | After release            | -                                                        | `slack_webhook_url`                                           |
 
 ## Security & Changelog
@@ -128,7 +133,7 @@ jobs:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
 ```
 
-### Multi-Registry
+### Multi-Registry (Docker Hub + GCP + ACR)
 
 ```yaml
 jobs:
@@ -142,10 +147,27 @@ jobs:
       gcp_region: us-central1
       gcp_project_id: my-project
       gcp_repo: docker-images
+      acr_registry: myregistry.azurecr.io
+      acr_repository: my-app
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
       gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+      acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+### Azure Container Registry Only
+
+```yaml
+jobs:
+  release:
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: my-app
+      acr_registry: myregistry.azurecr.io
+      acr_repository: my-app
+    secrets:
+      acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
 ```
 
 ## Troubleshooting
@@ -163,6 +185,12 @@ jobs:
 
 - Verify all inputs: `gcp_region`, `gcp_project_id`, `gcp_repo`
 - Check `gcp_credentials` has Artifact Registry Writer role
+
+**ACR push fails**
+
+- Verify all inputs: `acr_registry`, `acr_repository`
+- Check `acr_credentials` is valid service principal JSON with `AcrPush` role
+- Ensure registry name format is correct (e.g., `myregistry.azurecr.io`)
 
 **Security scan upload fails**
 

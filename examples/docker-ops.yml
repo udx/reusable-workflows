@@ -32,7 +32,7 @@ jobs:
   #     docker_token: ${{ secrets.DOCKER_TOKEN }}
 
   # ===========================================================================
-  # Example 3: Multi-Registry (Docker Hub + GCP + Slack)
+  # Example 3: Multi-Registry (Docker Hub + GCP + ACR + Slack)
   # ===========================================================================
 
   multi-registry:
@@ -51,6 +51,10 @@ jobs:
       gcp_project_id: my-gcp-project
       gcp_repo: docker-images
 
+      # Azure Container Registry
+      acr_registry: myregistry.azurecr.io
+      acr_repository: my-app
+
       # Optional: Custom build settings
       # dockerfile_path: ./Dockerfile
       # build_platforms: linux/amd64,linux/arm64
@@ -59,6 +63,7 @@ jobs:
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
       gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+      acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 # ===========================================================================
 # Quick Reference
@@ -74,6 +79,8 @@ jobs:
 # Secrets Setup:
 #   - DOCKER_TOKEN: https://hub.docker.com/settings/security
 #   - GCP_CREDENTIALS: Service account JSON with Artifact Registry Writer
+#   - ACR_CREDENTIALS: Service principal JSON with AcrPush role
+#     Create with: az ad sp create-for-rbac --name "github-actions-acr" --role "AcrPush" --scopes /subscriptions/{sub-id}/resourceGroups/{rg}/providers/Microsoft.ContainerRegistry/registries/{registry} --sdk-auth
 #   - SLACK_WEBHOOK_URL: https://api.slack.com/messaging/webhooks
 #
 # Changelog:
