@@ -46,6 +46,8 @@ jobs:
 | `gcp_region`              | GCP region (e.g., `us-central1`)   | -                         | For GCP        |
 | `gcp_project_id`          | GCP project ID                     | -                         | For GCP        |
 | `gcp_repo`                | Artifact Registry repo name        | -                         | For GCP        |
+| `gcp_workload_identity_provider` | Workload Identity Provider resource name | -              | For GCP        |
+| `gcp_service_account`     | Service account email for WIF      | -                         | For GCP        |
 | **Azure Container Registry** |
 | `acr_registry`            | ACR registry name (e.g., `myregistry.azurecr.io`) | -              | For ACR        |
 | `acr_repository`          | ACR repository name                | -                         | For ACR        |
@@ -64,9 +66,10 @@ jobs:
 | Secret              | Description                          | Required       |
 | ------------------- | ------------------------------------ | -------------- |
 | `docker_token`      | Docker Hub token                     | For Docker Hub |
-| `gcp_credentials`   | GCP service account JSON             | For GCP        |
 | `acr_credentials`   | Azure service principal JSON         | For ACR        |
 | `slack_webhook_url` | Slack webhook URL                    | For Slack      |
+
+**Note:** GCP authentication now uses Workload Identity Federation (keyless auth). JSON key authentication is no longer supported.
 
 ## Versioning
 
@@ -88,7 +91,7 @@ Example: `build_args: "VERSION={{version}},ENV=production"`
 | ------------------ | ------------------------ | -------------------------------------------------------- | ------------------------------------------------------------- |
 | **GitHub Release** | Release branch           | Version tag                                              | None                                                          |
 | **Docker Hub**     | Release branch           | `version`, `latest`                                      | `docker_login`, `docker_org`, `docker_repo`, `docker_token`   |
-| **GCP**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_credentials` |
+| **GCP**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` |
 | **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `acr_credentials`           |
 | **Slack**          | After release            | -                                                        | `slack_webhook_url`                                           |
 
@@ -147,11 +150,12 @@ jobs:
       gcp_region: us-central1
       gcp_project_id: my-project
       gcp_repo: docker-images
+      gcp_workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/github-provider
+      gcp_service_account: github-actions@my-project.iam.gserviceaccount.com
       acr_registry: myregistry.azurecr.io
       acr_repository: my-app
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
-      gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
       acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
@@ -170,6 +174,69 @@ jobs:
       acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
 ```
 
+## GCP Workload Identity Federation Setup
+
+To use GCP Artifact Registry with keyless authentication, configure Workload Identity Federation:
+
+### 1. Create Workload Identity Pool
+
+```bash
+gcloud iam workload-identity-pools create "github" \
+  --project="my-project" \
+  --location="global" \
+  --display-name="GitHub Actions Pool"
+```
+
+### 2. Create Workload Identity Provider
+
+```bash
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --project="my-project" \
+  --location="global" \
+  --workload-identity-pool="github" \
+  --display-name="GitHub Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+  --attribute-condition="assertion.repository_owner == 'your-org'" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+```
+
+### 3. Create Service Account
+
+```bash
+gcloud iam service-accounts create github-actions \
+  --project="my-project" \
+  --display-name="GitHub Actions"
+```
+
+### 4. Grant Artifact Registry Writer Role
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member="serviceAccount:github-actions@my-project.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+```
+
+### 5. Allow GitHub Actions to Impersonate Service Account
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding github-actions@my-project.iam.gserviceaccount.com \
+  --project="my-project" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/your-org/your-repo"
+```
+
+### 6. Get Provider Resource Name
+
+```bash
+gcloud iam workload-identity-pools providers describe "github-provider" \
+  --project="my-project" \
+  --location="global" \
+  --workload-identity-pool="github" \
+  --format="value(name)"
+```
+
+Use this output as `gcp_workload_identity_provider` input.
+
 ## Troubleshooting
 
 **GitVersion config not found**
@@ -183,8 +250,10 @@ jobs:
 
 **GCP push fails**
 
-- Verify all inputs: `gcp_region`, `gcp_project_id`, `gcp_repo`
-- Check `gcp_credentials` has Artifact Registry Writer role
+- Verify all inputs: `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account`
+- Ensure Workload Identity Federation is properly configured in GCP
+- Check service account has Artifact Registry Writer role
+- Verify the Workload Identity Pool is configured to trust GitHub Actions from your repository
 
 **ACR push fails**
 

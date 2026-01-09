@@ -20,6 +20,14 @@ on:
         description: "GCP Artifact Registry repository name"
         required: false
         type: string
+      gcp_workload_identity_provider:
+        description: "GCP Workload Identity Provider (e.g., projects/123/locations/global/workloadIdentityPools/pool/providers/provider)"
+        required: false
+        type: string
+      gcp_service_account:
+        description: "GCP Service Account email for Workload Identity Federation"
+        required: false
+        type: string
       acr_registry:
         description: "Azure Container Registry name (e.g., myregistry.azurecr.io)"
         required: false
@@ -79,9 +87,6 @@ on:
       docker_token:
         description: "Docker Hub token for authentication"
         required: false
-      gcp_credentials:
-        description: "GCP service account credentials JSON"
-        required: false
       acr_credentials:
         description: "Azure service principal credentials JSON"
         required: false
@@ -114,6 +119,8 @@ jobs:
       gcp_region: ${{ steps.extract_gcp_creds.outputs.gcp_region }}
       gcp_project_id: ${{ steps.extract_gcp_creds.outputs.gcp_project_id }}
       gcp_repo: ${{ steps.extract_gcp_creds.outputs.gcp_repo }}
+      gcp_workload_identity_provider: ${{ steps.extract_gcp_creds.outputs.gcp_workload_identity_provider }}
+      gcp_service_account: ${{ steps.extract_gcp_creds.outputs.gcp_service_account }}
 
       # ACR configuration
       acr_has_credentials: ${{ steps.extract_acr_creds.outputs.has_credentials }}
@@ -150,6 +157,8 @@ jobs:
           echo "gcp_region=${{ inputs.gcp_region }}" >> $GITHUB_OUTPUT
           echo "gcp_project_id=${{ inputs.gcp_project_id }}" >> $GITHUB_OUTPUT
           echo "gcp_repo=${{ inputs.gcp_repo }}" >> $GITHUB_OUTPUT
+          echo "gcp_workload_identity_provider=${{ inputs.gcp_workload_identity_provider }}" >> $GITHUB_OUTPUT
+          echo "gcp_service_account=${{ inputs.gcp_service_account }}" >> $GITHUB_OUTPUT
 
           # Store ACR inputs
           echo "acr_registry=${{ inputs.acr_registry }}" >> $GITHUB_OUTPUT
@@ -312,28 +321,22 @@ jobs:
       - name: Extract and Check GCP Credentials
         id: extract_gcp_creds
         run: |
-          echo "🔄 Checking GCP credentials and configuration..."
+          echo "🔄 Checking GCP Workload Identity configuration..."
           # Get inputs from store_inputs step
           GCP_REGION="${{ steps.store_inputs.outputs.gcp_region }}"
           GCP_PROJECT_ID="${{ steps.store_inputs.outputs.gcp_project_id }}"
           GCP_REPO="${{ steps.store_inputs.outputs.gcp_repo }}"
+          GCP_WI_PROVIDER="${{ steps.store_inputs.outputs.gcp_workload_identity_provider }}"
+          GCP_SERVICE_ACCOUNT="${{ steps.store_inputs.outputs.gcp_service_account }}"
 
           # Define parameter map for validation
           declare -A params=(
             [gcp_region]="$GCP_REGION"
             [gcp_project_id]="$GCP_PROJECT_ID"
             [gcp_repo]="$GCP_REPO"
+            [gcp_workload_identity_provider]="$GCP_WI_PROVIDER"
+            [gcp_service_account]="$GCP_SERVICE_ACCOUNT"
           )
-
-          # Set GCP credentials check directly
-          HAS_GCP_CREDS="${{ secrets.gcp_credentials != '' }}"
-
-          # Log the status
-          if [ "$HAS_GCP_CREDS" = "true" ]; then
-            echo "ℹ️ GCP credentials found"
-          else
-            echo "⚠️ GCP credentials not found"
-          fi
 
           # Initialize variables
           ALL_PARAMS_SET=true
@@ -352,16 +355,10 @@ jobs:
             fi
           done
 
-          # Add GCP credentials to validation
-          if [ "$HAS_GCP_CREDS" != "true" ]; then
-            ALL_PARAMS_SET=false
-            MISSING_PARAMS="$MISSING_PARAMS GCP Credentials,"
-          fi
-
           # Set has_credentials output
           if [ "$ALL_PARAMS_SET" = true ]; then
             echo "has_credentials=true" >> $GITHUB_OUTPUT
-            echo "✅ GCP credentials and configuration complete"
+            echo "✅ GCP Workload Identity configuration complete"
           else
             echo "has_credentials=false" >> $GITHUB_OUTPUT
             echo "⚠️ Missing GCP parameters:${MISSING_PARAMS%,}"
@@ -905,6 +902,8 @@ jobs:
       GCP_REGION: ${{ needs.config.outputs.gcp_region }}
       GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
       GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ needs.config.outputs.gcp_workload_identity_provider }}
+      GCP_SERVICE_ACCOUNT: ${{ needs.config.outputs.gcp_service_account }}
       IMAGE_NAME: ${{ needs.config.outputs.image_name }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
@@ -927,7 +926,8 @@ jobs:
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: "${{ secrets.gcp_credentials }}"
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Configure Docker for Artifact Registry
         run: |
