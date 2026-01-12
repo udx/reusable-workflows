@@ -71,6 +71,11 @@ on:
         required: false
         default: "true"
         type: string
+      enable_sbom:
+        description: "Whether to generate and upload SBOM"
+        required: false
+        default: "true"
+        type: string
       docker_login:
         description: "Docker Hub username"
         required: false
@@ -582,6 +587,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
       ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
       ENABLE_SECURITY_UPLOAD: ${{ needs.config.outputs.enable_security_upload }}
+      ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
       DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
       DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
       DOCKER_TOKEN: ${{ secrets.docker_token }}
@@ -642,6 +648,7 @@ jobs:
 
       - name: Generate SBOM with Retry Logic
         id: generate-sbom
+        if: env.ENABLE_SBOM == 'true'
         run: |
           export TRIVY_DISABLE_VEX_NOTICE=true
           max_retries=5
@@ -683,6 +690,7 @@ jobs:
 
       - name: Upload SBOM Artifact
         uses: actions/upload-artifact@v5
+        if: env.ENABLE_SBOM == 'true'
         with:
           name: sbom
           path: sbom.json
