@@ -713,6 +713,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Temporary exit
+        run: exit 0
+
       - name: Download SBOM Artifact
         uses: actions/download-artifact@v6
         with:
