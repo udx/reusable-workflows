@@ -713,124 +713,121 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Temporary exit
-        run: exit 0
+      # - name: Download SBOM Artifact
+      #   uses: actions/download-artifact@v6
+      #   with:
+      #     name: sbom
+      #     path: ./
 
-      - name: Download SBOM Artifact
-        uses: actions/download-artifact@v6
-        with:
-          name: sbom
-          path: ./
+      # - name: Check for changes.md
+      #   id: check_changelog
+      #   run: |
+      #     if [ -f "./changes.md" ]; then
+      #       echo "has_changelog=true" >> $GITHUB_OUTPUT
+      #       echo "📖 Found changes.md file"
+      #     else
+      #       echo "has_changelog=false" >> $GITHUB_OUTPUT
+      #       echo "ℹ️ No changes.md file found, will generate changelog from git history"
+      #     fi
 
-      - name: Check for changes.md
-        id: check_changelog
-        run: |
-          if [ -f "./changes.md" ]; then
-            echo "has_changelog=true" >> $GITHUB_OUTPUT
-            echo "📖 Found changes.md file"
-          else
-            echo "has_changelog=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes.md file found, will generate changelog from git history"
-          fi
+      # - name: Parse Changelog from changes.md
+      #   id: parse_changelog
+      #   if: steps.check_changelog.outputs.has_changelog == 'true'
+      #   uses: actions/github-script@v8
+      #   with:
+      #     script: |
+      #       const { open } = require('fs/promises');
+      #       const fs = require('fs');
 
-      - name: Parse Changelog from changes.md
-        id: parse_changelog
-        if: steps.check_changelog.outputs.has_changelog == 'true'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { open } = require('fs/promises');
-            const fs = require('fs');
+      #       const version = '${{ env.RELEASE_VERSION }}';
+      #       const delimiter = '### ';
+      #       const file = await open('./changes.md');
 
-            const version = '${{ env.RELEASE_VERSION }}';
-            const delimiter = '### ';
-            const file = await open('./changes.md');
+      #       let description = [];
+      #       let found = false;
 
-            let description = [];
-            let found = false;
+      #       for await (let line of file.readLines()) {
+      #         line = line.trim();
 
-            for await (let line of file.readLines()) {
-              line = line.trim();
-              
-              if (line.startsWith(`${delimiter}${version}`)) {
-                found = true;
-                continue;
-              }
-              
-              if (!found) continue;
-              if (line.startsWith(delimiter)) break;
+      #         if (line.startsWith(`${delimiter}${version}`)) {
+      #           found = true;
+      #           continue;
+      #         }
 
-              description.push(line);
-            }
+      #         if (!found) continue;
+      #         if (line.startsWith(delimiter)) break;
 
-            if (description.length) {
-              const content = description.join('\n');
-              fs.writeFileSync('changelog.txt', content);
-              core.setOutput('has_description', 'true');
-              console.log(`✅ Found changelog entry for version ${version}`);
-            } else {
-              core.setOutput('has_description', 'false');
-              console.log(`⚠️ No changelog entry found for version ${version}`);
-            }
+      #         description.push(line);
+      #       }
 
-      - name: Generate Changelog from Git History
-        id: git_changelog
-        if: steps.check_changelog.outputs.has_changelog != 'true' || steps.parse_changelog.outputs.has_description != 'true'
-        run: |
-          echo "🔄 Generating changelog from git history..."
+      #       if (description.length) {
+      #         const content = description.join('\n');
+      #         fs.writeFileSync('changelog.txt', content);
+      #         core.setOutput('has_description', 'true');
+      #         console.log(`✅ Found changelog entry for version ${version}`);
+      #       } else {
+      #         core.setOutput('has_description', 'false');
+      #         console.log(`⚠️ No changelog entry found for version ${version}`);
+      #       }
 
-          # Check if this is the first tag
-          if [ "$(git tag | wc -l)" -eq "0" ]; then
-            echo "ℹ️ This is the first tag, using all commits"
-            REFERENCE=""
-          else
-            # Get the most recent tag
-            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            
-            if [ -z "$LAST_TAG" ]; then
-              echo "ℹ️ No previous tags found, using all commits"
-              REFERENCE=""
-            else
-              echo "ℹ️ Using commits since $LAST_TAG"
-              REFERENCE=$LAST_TAG
-            fi
-          fi
+      # - name: Generate Changelog from Git History
+      #   id: git_changelog
+      #   if: steps.check_changelog.outputs.has_changelog != 'true' || steps.parse_changelog.outputs.has_description != 'true'
+      #   run: |
+      #     echo "🔄 Generating changelog from git history..."
 
-          # Generate changelog with simple formatting - no header
-          # Get commits since last tag (just the commit message without hash)
-          # Exclude merge commits
-          git log $REFERENCE..HEAD --no-merges --pretty=format:"- %s" > changelog.txt
+      #     # Check if this is the first tag
+      #     if [ "$(git tag | wc -l)" -eq "0" ]; then
+      #       echo "ℹ️ This is the first tag, using all commits"
+      #       REFERENCE=""
+      #     else
+      #       # Get the most recent tag
+      #       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          # Check if changelog is empty
-          if [ ! -s changelog.txt ]; then
-            echo "ℹ️ No changes found, adding placeholder"
-            echo "- Initial release" > changelog.txt
-          fi
+      #       if [ -z "$LAST_TAG" ]; then
+      #         echo "ℹ️ No previous tags found, using all commits"
+      #         REFERENCE=""
+      #       else
+      #         echo "ℹ️ Using commits since $LAST_TAG"
+      #         REFERENCE=$LAST_TAG
+      #       fi
+      #     fi
 
-          echo "✅ Changelog generated from git history"
+      #     # Generate changelog with simple formatting - no header
+      #     # Get commits since last tag (just the commit message without hash)
+      #     # Exclude merge commits
+      #     git log $REFERENCE..HEAD --no-merges --pretty=format:"- %s" > changelog.txt
 
-      - name: Configure Git for Tagging
-        run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
+      #     # Check if changelog is empty
+      #     if [ ! -s changelog.txt ]; then
+      #       echo "ℹ️ No changes found, adding placeholder"
+      #       echo "- Initial release" > changelog.txt
+      #     fi
 
-      - name: Create GitHub Tag
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git tag ${{ env.RELEASE_VERSION }}
-          git push origin ${{ env.RELEASE_VERSION }}
+      #     echo "✅ Changelog generated from git history"
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          name: ${{ env.RELEASE_VERSION }}
-          body_path: changelog.txt
-          prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
-          files: sbom.json
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      # - name: Configure Git for Tagging
+      #   run: |
+      #     git config --global user.email "github-actions@github.com"
+      #     git config --global user.name "GitHub Actions"
+
+      # - name: Create GitHub Tag
+      #   env:
+      #     GITHUB_TOKEN: ${{ github.token }}
+      #   run: |
+      #     git tag ${{ env.RELEASE_VERSION }}
+      #     git push origin ${{ env.RELEASE_VERSION }}
+
+      # - name: Create Release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     tag_name: ${{ env.RELEASE_VERSION }}
+      #     name: ${{ env.RELEASE_VERSION }}
+      #     body_path: changelog.txt
+      #     prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
+      #     files: sbom.json
+      #   env:
+      #     GITHUB_TOKEN: ${{ github.token }}
 
   docker-hub-release:
     runs-on: ubuntu-24.04
