@@ -107,6 +107,7 @@ jobs:
       - name: Cleanup files
         run: |
           rm -f composer.lock || true
+          rm -f changes.md || true
           rm -rf tests || true
           rm -rf vendor/bin || true
           rm -rf vendor/composer/installers || true
