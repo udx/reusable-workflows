@@ -51,6 +51,9 @@ jobs:
 | **Azure Container Registry** |
 | `acr_registry`            | ACR registry name (e.g., `myregistry.azurecr.io`) | -              | For ACR        |
 | `acr_repository`          | ACR repository name                | -                         | For ACR        |
+| `azure_client_id`         | Azure Client ID for OIDC           | -                         | For ACR        |
+| `azure_tenant_id`         | Azure Tenant ID for OIDC           | -                         | For ACR        |
+| `azure_subscription_id`   | Azure Subscription ID for OIDC     | -                         | For ACR        |
 | **Build**                 |
 | `release_branch`          | Branch that triggers releases      | `latest`                  |                |
 | `dockerfile_path`         | Path to Dockerfile                 | `./Dockerfile`            |                |
@@ -66,10 +69,24 @@ jobs:
 | Secret              | Description                          | Required       |
 | ------------------- | ------------------------------------ | -------------- |
 | `docker_token`      | Docker Hub token                     | For Docker Hub |
-| `acr_credentials`   | Azure service principal JSON         | For ACR        |
 | `slack_webhook_url` | Slack webhook URL                    | For Slack      |
 
-**Note:** GCP authentication now uses Workload Identity Federation (keyless auth). JSON key authentication is no longer supported.
+**Note:** Both GCP and Azure authentication now use OIDC/Workload Identity Federation (keyless auth). JSON key/credential authentication is no longer supported.
+
+## Dependency & Permission Matrix
+
+This matrix maps each registry type to its required configuration for AI-assisted workflow generation:
+
+| Registry Type | Mandatory Inputs | Mandatory Secrets | Required IAM Role/Permission |
+|--------------|------------------|-------------------|------------------------------|
+| **Docker Hub** | `docker_login`, `docker_org`, `docker_repo` | `docker_token` | Token with push permissions |
+| **GCP Artifact Registry** | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` | None (OIDC) | `roles/artifactregistry.writer` on service account |
+| **Azure Container Registry** | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id` | None (OIDC) | `AcrPush` role on service principal |
+
+**Key Points:**
+- **Docker Hub**: Requires username, organization, repository name, and a personal access token with push permissions
+- **GCP**: Uses Workload Identity Federation (keyless). Service account must have Artifact Registry Writer role
+- **Azure**: Uses OIDC authentication (keyless). Service principal must have AcrPush role on the registry
 
 ## Versioning
 
@@ -92,7 +109,7 @@ Example: `build_args: "VERSION={{version}},ENV=production"`
 | **GitHub Release** | Release branch           | Version tag                                              | None                                                          |
 | **Docker Hub**     | Release branch           | `version`, `latest`                                      | `docker_login`, `docker_org`, `docker_repo`, `docker_token`   |
 | **GCP**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` |
-| **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `acr_credentials`           |
+| **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id` |
 | **Slack**          | After release            | -                                                        | `slack_webhook_url`                                           |
 
 ## Security & Changelog
@@ -154,9 +171,11 @@ jobs:
       gcp_service_account: github-actions@my-project.iam.gserviceaccount.com
       acr_registry: myregistry.azurecr.io
       acr_repository: my-app
+      azure_client_id: 12345678-90ab-cdef-1234-567890abcdef
+      azure_tenant_id: 87654321-fedc-ba09-8765-4321fedcba09
+      azure_subscription_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
-      acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
@@ -165,13 +184,17 @@ jobs:
 ```yaml
 jobs:
   release:
+    permissions:
+      id-token: write
+      contents: read
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: my-app
       acr_registry: myregistry.azurecr.io
       acr_repository: my-app
-    secrets:
-      acr_credentials: ${{ secrets.ACR_CREDENTIALS }}
+      azure_client_id: 12345678-90ab-cdef-1234-567890abcdef
+      azure_tenant_id: 87654321-fedc-ba09-8765-4321fedcba09
+      azure_subscription_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
 ## GCP Workload Identity Federation Setup
@@ -237,6 +260,101 @@ gcloud iam workload-identity-pools providers describe "github-provider" \
 
 Use this output as `gcp_workload_identity_provider` input.
 
+## Azure OIDC Setup
+
+To use Azure Container Registry with OIDC authentication, configure federated credentials for your service principal:
+
+### 1. Create Service Principal
+
+```bash
+az ad sp create-for-rbac --name "sp-github-actions-acr" \
+  --role "AcrPush" \
+  --scopes /subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/resourceGroups/my-resource-group/providers/Microsoft.ContainerRegistry/registries/myregistry
+```
+
+Note the `appId` (Client ID), `tenant` (Tenant ID) from the output.
+
+### 2. Configure Federated Credentials
+
+Azure supports multiple credential patterns. Choose based on your security requirements:
+
+#### Option A: Strict Security (Production Recommended)
+
+**Single branch credential** - Only the specified branch can authenticate:
+
+```bash
+az ad app federated-credential create \
+  --id 12345678-90ab-cdef-1234-567890abcdef \
+  --parameters '{
+    "name": "github-actions-main",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:your-org/your-repo:ref:refs/heads/main",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+```
+
+**Use when:**
+- Production environments
+- You only publish from release branches
+- Following principle of least privilege
+
+#### Option B: Flexible Security (Development/Testing)
+
+**Wildcard credential** - All branches and PRs can authenticate:
+
+```bash
+az ad app federated-credential create \
+  --id 12345678-90ab-cdef-1234-567890abcdef \
+  --parameters '{
+    "name": "github-actions-all-branches",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:your-org/your-repo:ref:refs/heads/*",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+
+# Optional: Add PR support
+az ad app federated-credential create \
+  --id 12345678-90ab-cdef-1234-567890abcdef \
+  --parameters '{
+    "name": "github-actions-pr",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:your-org/your-repo:pull_request",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+```
+
+**Use when:**
+- Development/test subscriptions
+- You need to test builds from feature branches
+- Convenience outweighs strict security
+
+**Note:** This workflow only publishes on release branches by default, so Option A is sufficient for most use cases. Option B is useful for development environments where you want flexibility to test from any branch.
+
+### 3. Required Workflow Permissions
+
+Ensure your workflow has `id-token: write` permission:
+
+```yaml
+jobs:
+  release:
+    permissions:
+      id-token: write
+      contents: read
+```
+
+### 4. Use in Workflow
+
+Provide the Azure OIDC parameters:
+
+```yaml
+with:
+  acr_registry: myregistry.azurecr.io
+  acr_repository: my-app
+  azure_client_id: 12345678-90ab-cdef-1234-567890abcdef
+  azure_tenant_id: 87654321-fedc-ba09-8765-4321fedcba09
+  azure_subscription_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
 ## Troubleshooting
 
 **GitVersion config not found**
@@ -257,14 +375,63 @@ Use this output as `gcp_workload_identity_provider` input.
 
 **ACR push fails**
 
-- Verify all inputs: `acr_registry`, `acr_repository`
-- Check `acr_credentials` is valid service principal JSON with `AcrPush` role
+- Verify all inputs: `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id`
+- Ensure federated credentials are configured for your repository in Azure AD
+- Check service principal has `AcrPush` role on the registry
+- Verify `id-token: write` permission is set in workflow
 - Ensure registry name format is correct (e.g., `myregistry.azurecr.io`)
 
 **Security scan upload fails**
 
 - Only works on release branches
 - Requires `security-events: write` permission (auto-granted)
+
+## AI Implementation Prompt
+
+Use this template with AI coding assistants to generate a complete workflow configuration:
+
+```
+Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master 
+template to create a Docker release workflow for my containerized application.
+
+Requirements:
+1. Check the Dependency & Permission Matrix in docs/docker-ops.md
+2. Include all mandatory inputs for [Docker Hub/GCP/ACR] based on my target registry
+3. Use build_args with {{version}} placeholder for version injection
+4. Ensure proper OIDC permissions for cloud registries (id-token: write)
+5. Configure for release branch: [main/master/latest]
+
+Project context:
+- Docker image name: [your-image-name]
+- Target registries: [Docker Hub/GCP Artifact Registry/Azure Container Registry]
+- Dockerfile location: [./Dockerfile or custom path]
+- Build arguments: [any ARG values needed in Dockerfile]
+- Multi-platform builds: [linux/amd64, linux/arm64, or custom]
+
+Verify that all mandatory inputs from the matrix are included and properly configured.
+```
+
+**Example usage:**
+```
+Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master 
+template to create a Docker release workflow for my containerized application.
+
+Requirements:
+1. Check the Dependency & Permission Matrix in docs/docker-ops.md
+2. Include all mandatory inputs for GCP based on my target registry
+3. Use build_args with {{version}} placeholder for version injection
+4. Ensure proper OIDC permissions for cloud registries (id-token: write)
+5. Configure for release branch: main
+
+Project context:
+- Docker image name: my-api-service
+- Target registries: GCP Artifact Registry
+- Dockerfile location: ./Dockerfile
+- Build arguments: APP_VERSION={{version}}, BUILD_DATE={{branch}}
+- Multi-platform builds: linux/amd64,linux/arm64
+
+Verify that all mandatory inputs from the matrix are included and properly configured.
+```
 
 ## Best Practices
 
