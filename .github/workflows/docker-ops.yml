@@ -1065,7 +1065,9 @@ jobs:
 
       - name: Log in to Azure Container Registry
         run: |
-          az acr login --name $(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+          TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
+          echo "${TOKEN}" | docker login ${{ env.ACR_REGISTRY }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       # Create safe branch name for feature branches
       - name: Create safe branch name
