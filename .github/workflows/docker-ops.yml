@@ -5,78 +5,107 @@ on:
   workflow_call:
     inputs:
       image_name:
-        description: "Name of the Docker image"
+        description: "Primary identifier; must be lowercase, URL-safe, and matches your registry repository name"
         required: true
         type: string
       gcp_region:
-        description: "GCP region for Artifact Registry"
+        description: "GCP region for Artifact Registry (Required if publishing to GCP)"
         required: false
         type: string
       gcp_project_id:
-        description: "GCP project ID"
+        description: "GCP project ID (Required if publishing to GCP)"
         required: false
         type: string
       gcp_repo:
-        description: "GCP Artifact Registry repository name"
+        description: "GCP Artifact Registry repository name (Required if publishing to GCP)"
+        required: false
+        type: string
+      gcp_workload_identity_provider:
+        description: "GCP Workload Identity Provider (format: projects/NUM/locations/global/workloadIdentityPools/POOL/providers/PROV) (Required if publishing to GCP)"
+        required: false
+        type: string
+      gcp_service_account:
+        description: "GCP Service Account email for Workload Identity Federation (Required if publishing to GCP)"
+        required: false
+        type: string
+      acr_registry:
+        description: "Azure Container Registry name (e.g., myregistry.azurecr.io) (Required if publishing to ACR)"
+        required: false
+        type: string
+      acr_repository:
+        description: "ACR repository name (Required if publishing to ACR)"
+        required: false
+        type: string
+      azure_client_id:
+        description: "Azure Client ID for OIDC authentication (Required if publishing to ACR)"
+        required: false
+        type: string
+      azure_tenant_id:
+        description: "Azure Tenant ID for OIDC authentication (Required if publishing to ACR)"
+        required: false
+        type: string
+      azure_subscription_id:
+        description: "Azure Subscription ID for OIDC authentication (Required if publishing to ACR)"
         required: false
         type: string
       release_branch:
-        description: "Branch name that triggers releases"
+        description: "Branch name that triggers releases (default: latest)"
         required: false
         default: "latest"
         type: string
       dockerfile_path:
-        description: "Path to the Dockerfile"
+        description: "Path to the Dockerfile (default: ./Dockerfile)"
         required: false
         default: "./Dockerfile"
         type: string
       build_platforms:
-        description: "Platforms to release to Docker Hub (comma-separated)"
+        description: "Platforms to build for (comma-separated, e.g., linux/amd64,linux/arm64)"
         required: false
         default: "linux/amd64,linux/arm64"
         type: string
       version_config_path:
-        description: "Path to GitVersion config file"
+        description: "Path to GitVersion config file (only used if package.json is absent)"
         required: false
         default: "ci/git-version.yml"
         type: string
       build_args:
-        description: "Additional build arguments in format ARG1=value1,ARG2=value2"
+        description: "Additional build arguments in format ARG1=value1,ARG2=value2 (supports placeholders: {{version}}, {{branch}})"
         required: false
         default: ""
         type: string
       enable_security_scan:
-        description: "Whether to perform a security scan"
+        description: "Whether to perform a security scan with Trivy (default: true)"
         required: false
         default: "true"
         type: string
       enable_security_upload:
-        description: "Whether to upload vulnerability scan results to GitHub Security"
+        description: "Whether to upload vulnerability scan results to GitHub Security (default: true, only on release branches)"
+        required: false
+        default: "true"
+        type: string
+      enable_sbom:
+        description: "Whether to generate and upload SBOM in SPDX format (default: true)"
         required: false
         default: "true"
         type: string
       docker_login:
-        description: "Docker Hub username"
+        description: "Docker Hub username (Required if publishing to Docker Hub)"
         required: false
         type: string
       docker_org:
-        description: "Docker Hub organization name"
+        description: "Docker Hub organization name (Required if publishing to Docker Hub)"
         required: false
         type: string
       docker_repo:
-        description: "Docker Hub repository name"
+        description: "Docker Hub repository name (Required if publishing to Docker Hub)"
         required: false
         type: string
     secrets:
       docker_token:
-        description: "Docker Hub token for authentication"
+        description: "Docker Hub token for authentication (Required if publishing to Docker Hub)"
         required: false
-      gcp_credentials:
-        description: "GCP service account credentials JSON"
-        required: false
-
       slack_webhook_url:
-        description: "Slack webhook URL for notifications"
+        description: "Slack webhook URL for notifications (Optional, for release notifications)"
         required: false
 
 jobs:
@@ -103,6 +132,16 @@ jobs:
       gcp_region: ${{ steps.extract_gcp_creds.outputs.gcp_region }}
       gcp_project_id: ${{ steps.extract_gcp_creds.outputs.gcp_project_id }}
       gcp_repo: ${{ steps.extract_gcp_creds.outputs.gcp_repo }}
+      gcp_workload_identity_provider: ${{ steps.extract_gcp_creds.outputs.gcp_workload_identity_provider }}
+      gcp_service_account: ${{ steps.extract_gcp_creds.outputs.gcp_service_account }}
+
+      # ACR configuration
+      acr_has_credentials: ${{ steps.extract_acr_creds.outputs.has_credentials }}
+      acr_registry: ${{ steps.extract_acr_creds.outputs.acr_registry }}
+      acr_repository: ${{ steps.extract_acr_creds.outputs.acr_repository }}
+      azure_client_id: ${{ steps.extract_acr_creds.outputs.azure_client_id }}
+      azure_tenant_id: ${{ steps.extract_acr_creds.outputs.azure_tenant_id }}
+      azure_subscription_id: ${{ steps.extract_acr_creds.outputs.azure_subscription_id }}
 
       # Build configuration
       image_name: ${{ steps.store_inputs.outputs.image_name }}
@@ -116,6 +155,7 @@ jobs:
       # Security configuration
       enable_security_scan: ${{ steps.store_inputs.outputs.enable_security_scan }}
       enable_security_upload: ${{ steps.store_inputs.outputs.enable_security_upload }}
+      enable_sbom: ${{ steps.store_inputs.outputs.enable_sbom }}
 
     steps:
       - name: Store inputs as outputs
@@ -128,14 +168,25 @@ jobs:
           echo "dockerfile_path=${{ inputs.dockerfile_path }}" >> $GITHUB_OUTPUT
           echo "build_platforms=${{ inputs.build_platforms }}" >> $GITHUB_OUTPUT
           echo "version_config_path=${{ inputs.version_config_path }}" >> $GITHUB_OUTPUT
-          echo "provided_version=${{ inputs.version }}" >> $GITHUB_OUTPUT
 
           # Store GCP inputs
           echo "gcp_region=${{ inputs.gcp_region }}" >> $GITHUB_OUTPUT
           echo "gcp_project_id=${{ inputs.gcp_project_id }}" >> $GITHUB_OUTPUT
           echo "gcp_repo=${{ inputs.gcp_repo }}" >> $GITHUB_OUTPUT
+          echo "gcp_workload_identity_provider=${{ inputs.gcp_workload_identity_provider }}" >> $GITHUB_OUTPUT
+          echo "gcp_service_account=${{ inputs.gcp_service_account }}" >> $GITHUB_OUTPUT
+
+          # Store ACR inputs
+          echo "acr_registry=${{ inputs.acr_registry }}" >> $GITHUB_OUTPUT
+          echo "acr_repository=${{ inputs.acr_repository }}" >> $GITHUB_OUTPUT
+
+          # Store Azure OIDC inputs
+          echo "azure_client_id=${{ inputs.azure_client_id }}" >> $GITHUB_OUTPUT
+          echo "azure_tenant_id=${{ inputs.azure_tenant_id }}" >> $GITHUB_OUTPUT
+          echo "azure_subscription_id=${{ inputs.azure_subscription_id }}" >> $GITHUB_OUTPUT
 
           # Store security upload setting
+          echo "enable_sbom=${{ inputs.enable_sbom }}" >> $GITHUB_OUTPUT
           echo "enable_security_scan=${{ inputs.enable_security_scan }}" >> $GITHUB_OUTPUT
           echo "enable_security_upload=${{ inputs.enable_security_upload }}" >> $GITHUB_OUTPUT
 
@@ -292,28 +343,22 @@ jobs:
       - name: Extract and Check GCP Credentials
         id: extract_gcp_creds
         run: |
-          echo "🔄 Checking GCP credentials and configuration..."
+          echo "🔄 Checking GCP Workload Identity configuration..."
           # Get inputs from store_inputs step
           GCP_REGION="${{ steps.store_inputs.outputs.gcp_region }}"
           GCP_PROJECT_ID="${{ steps.store_inputs.outputs.gcp_project_id }}"
           GCP_REPO="${{ steps.store_inputs.outputs.gcp_repo }}"
+          GCP_WI_PROVIDER="${{ steps.store_inputs.outputs.gcp_workload_identity_provider }}"
+          GCP_SERVICE_ACCOUNT="${{ steps.store_inputs.outputs.gcp_service_account }}"
 
           # Define parameter map for validation
           declare -A params=(
             [gcp_region]="$GCP_REGION"
             [gcp_project_id]="$GCP_PROJECT_ID"
             [gcp_repo]="$GCP_REPO"
+            [gcp_workload_identity_provider]="$GCP_WI_PROVIDER"
+            [gcp_service_account]="$GCP_SERVICE_ACCOUNT"
           )
-
-          # Set GCP credentials check directly
-          HAS_GCP_CREDS="${{ secrets.gcp_credentials != '' }}"
-
-          # Log the status
-          if [ "$HAS_GCP_CREDS" = "true" ]; then
-            echo "ℹ️ GCP credentials found"
-          else
-            echo "⚠️ GCP credentials not found"
-          fi
 
           # Initialize variables
           ALL_PARAMS_SET=true
@@ -332,19 +377,59 @@ jobs:
             fi
           done
 
-          # Add GCP credentials to validation
-          if [ "$HAS_GCP_CREDS" != "true" ]; then
-            ALL_PARAMS_SET=false
-            MISSING_PARAMS="$MISSING_PARAMS GCP Credentials,"
+          # Set has_credentials output
+          if [ "$ALL_PARAMS_SET" = true ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "✅ GCP Workload Identity configuration complete"
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Missing GCP parameters:${MISSING_PARAMS%,}"
           fi
+
+      - name: Extract and Check ACR Credentials
+        id: extract_acr_creds
+        run: |
+          echo "🔄 Checking ACR credentials and configuration..."
+          # Get inputs from store_inputs step
+          ACR_REGISTRY="${{ steps.store_inputs.outputs.acr_registry }}"
+          ACR_REPOSITORY="${{ steps.store_inputs.outputs.acr_repository }}"
+          AZURE_CLIENT_ID="${{ steps.store_inputs.outputs.azure_client_id }}"
+          AZURE_TENANT_ID="${{ steps.store_inputs.outputs.azure_tenant_id }}"
+          AZURE_SUBSCRIPTION_ID="${{ steps.store_inputs.outputs.azure_subscription_id }}"
+
+          # Define parameter map for validation
+          declare -A params=(
+            [acr_registry]="$ACR_REGISTRY"
+            [acr_repository]="$ACR_REPOSITORY"
+            [azure_client_id]="$AZURE_CLIENT_ID"
+            [azure_tenant_id]="$AZURE_TENANT_ID"
+            [azure_subscription_id]="$AZURE_SUBSCRIPTION_ID"
+          )
+
+          # Initialize variables
+          ALL_PARAMS_SET=true
+          MISSING_PARAMS=""
+
+          # Check each parameter
+          for param in "${!params[@]}"; do
+            if [ -n "${params[$param]}" ]; then
+              # Parameter is set, add to output
+              echo "$param=${params[$param]}" >> $GITHUB_OUTPUT
+              echo "ℹ️ ACR $param: ${params[$param]}"
+            else
+              # Parameter is missing
+              ALL_PARAMS_SET=false
+              MISSING_PARAMS="$MISSING_PARAMS $param,"
+            fi
+          done
 
           # Set has_credentials output
           if [ "$ALL_PARAMS_SET" = true ]; then
             echo "has_credentials=true" >> $GITHUB_OUTPUT
-            echo "✅ GCP credentials and configuration complete"
+            echo "✅ ACR credentials and configuration complete"
           else
             echo "has_credentials=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Missing GCP parameters:${MISSING_PARAMS%,}"
+            echo "⚠️ Missing ACR parameters:${MISSING_PARAMS%,}"
           fi
 
       - name: Extract and Check Slack Webhook
@@ -416,6 +501,7 @@ jobs:
           echo "🐳 Docker Hub Pulling: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
           echo "🐳 Docker Hub Publishing: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && steps.extract_docker_publish_config.outputs.has_config == 'true' && '✅ enabled' || '❌ disabled' }}"
           echo "☁️ Google Cloud: ${{ steps.extract_gcp_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "💠 Azure Container Registry: ${{ steps.extract_acr_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
           echo ""
           echo "⚙️ Workflow Execution Plan"
           echo "----------------------------"
@@ -444,6 +530,15 @@ jobs:
             echo "☁️ GCP Release: ✅ Will run"
           else
             echo "☁️ GCP Release: ❌ Will not run"
+          fi
+
+          # ACR Release - on release branches or manual trigger with credentials
+          if [[ ("${{ steps.branches.outputs.is_release_branch }}" == "true" || \
+                "${{ github.event_name }}" == "workflow_dispatch") && \
+                "${{ steps.extract_acr_creds.outputs.has_credentials }}" == "true" ]]; then
+            echo "💠 ACR Release: ✅ Will run"
+          else
+            echo "💠 ACR Release: ❌ Will not run"
           fi
 
           # Slack Notification - only on release branches with webhook
@@ -499,6 +594,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
       ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
       ENABLE_SECURITY_UPLOAD: ${{ needs.config.outputs.enable_security_upload }}
+      ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
       DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
       DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
       DOCKER_TOKEN: ${{ secrets.docker_token }}
@@ -559,6 +655,7 @@ jobs:
 
       - name: Generate SBOM with Retry Logic
         id: generate-sbom
+        if: env.ENABLE_SBOM == 'true'
         run: |
           export TRIVY_DISABLE_VEX_NOTICE=true
           max_retries=5
@@ -600,6 +697,7 @@ jobs:
 
       - name: Upload SBOM Artifact
         uses: actions/upload-artifact@v5
+        if: env.ENABLE_SBOM == 'true'
         with:
           name: sbom
           path: sbom.json
@@ -616,6 +714,7 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -623,6 +722,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download SBOM Artifact
+        if: env.ENABLE_SBOM == 'true'
         uses: actions/download-artifact@v6
         with:
           name: sbom
@@ -657,12 +757,12 @@ jobs:
 
             for await (let line of file.readLines()) {
               line = line.trim();
-              
+
               if (line.startsWith(`${delimiter}${version}`)) {
                 found = true;
                 continue;
               }
-              
+
               if (!found) continue;
               if (line.startsWith(delimiter)) break;
 
@@ -692,7 +792,7 @@ jobs:
           else
             # Get the most recent tag
             LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            
+
             if [ -z "$LAST_TAG" ]; then
               echo "ℹ️ No previous tags found, using all commits"
               REFERENCE=""
@@ -734,7 +834,7 @@ jobs:
           name: ${{ env.RELEASE_VERSION }}
           body_path: changelog.txt
           prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
-          files: sbom.json
+          files: ${{ env.ENABLE_SBOM == 'true' && 'sbom.json' || '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -819,6 +919,8 @@ jobs:
       GCP_REGION: ${{ needs.config.outputs.gcp_region }}
       GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
       GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ needs.config.outputs.gcp_workload_identity_provider }}
+      GCP_SERVICE_ACCOUNT: ${{ needs.config.outputs.gcp_service_account }}
       IMAGE_NAME: ${{ needs.config.outputs.image_name }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
@@ -841,7 +943,8 @@ jobs:
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: "${{ secrets.gcp_credentials }}"
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Configure Docker for Artifact Registry
         run: |
@@ -916,15 +1019,146 @@ jobs:
       - name: Log out from Google Cloud
         run: docker logout
 
+  azure-container-registry-release:
+    runs-on: ubuntu-24.04
+    needs: [config, build-and-scan, github-release]
+    if: |
+      always() &&
+      needs.config.outputs.acr_has_credentials == 'true' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
+      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BUILD_PLATFORM: "amd64"
+      DOCKER_USERNAME: ${{ needs.config.outputs.docker_login }}
+      DOCKER_PASSWORD: ${{ secrets.docker_token }}
+      DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
+      ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
+      ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
+      AZURE_CLIENT_ID: ${{ needs.config.outputs.azure_client_id }}
+      AZURE_TENANT_ID: ${{ needs.config.outputs.azure_tenant_id }}
+      AZURE_SUBSCRIPTION_ID: ${{ needs.config.outputs.azure_subscription_id }}
+      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Docker Hub
+        if: env.DOCKER_HAS_CREDENTIALS == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Authenticate with Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+          TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
+          echo "${TOKEN}" | docker login ${{ env.ACR_REGISTRY }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
+
+      # Create safe branch name for feature branches
+      - name: Create safe branch name
+        if: env.IS_RELEASE_BRANCH == 'false'
+        run: |
+          # Create safe branch name by replacing slashes with dashes
+          SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
+          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+
+      # Delete existing images to prevent orphaned resources
+      - name: Delete existing images in ACR
+        if: env.IS_RELEASE_BRANCH == 'false'
+        # Skip for production builds which use semantic versioning
+        run: |
+          echo "🔄 Checking for existing feature branch images..."
+          # Define variables
+          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+          REPOSITORY="${{ env.ACR_REPOSITORY }}"
+          TAG="${{ env.SAFE_BRANCH_NAME }}"
+
+          echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
+
+          # Check if the tag exists
+          TAG_EXISTS=$(az acr repository show-tags --name ${REGISTRY_NAME} --repository ${REPOSITORY} --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
+
+          if [ -n "${TAG_EXISTS}" ]; then
+            echo "ℹ️ Found existing image with tag: ${TAG}"
+
+            # Delete the image by tag
+            echo "🗑️ Deleting previous image by tag..."
+            az acr repository delete --name ${REGISTRY_NAME} --image ${REPOSITORY}:${TAG} --yes
+
+            echo "✅ Previous image deletion completed"
+          else
+            echo "ℹ️ No previous image found with tag ${TAG}"
+          fi
+
+      # Prepare ACR Docker tags based on branch and settings
+      - name: Prepare ACR Docker tags
+        id: prepare_acr_tags
+        run: |
+          echo "🔄 Preparing ACR Docker tags..."
+          # Set tags based on branch
+          if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
+            # Production release - use semantic version and latest tag
+            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.RELEASE_VERSION }},${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:latest"
+            echo "ℹ️ Production release: Adding both version and latest tags"
+          else
+            # Feature branch build - only use branch name tag
+            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.SAFE_BRANCH_NAME }}"
+            echo "ℹ️ Feature branch build: Using branch name tag only"
+          fi
+
+          echo "ACR_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "✅ ACR Tags prepared: $TAGS"
+
+      - name: Push Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/${{ env.BUILD_PLATFORM }}
+          push: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.ACR_DOCKER_TAGS }}
+
+      - name: Log out from Azure Container Registry
+        run: docker logout ${{ env.ACR_REGISTRY }}
+
   notify:
     runs-on: ubuntu-24.04
-    needs: [config, github-release, docker-hub-release, google-cloud-release]
+    needs:
+      [
+        config,
+        github-release,
+        docker-hub-release,
+        google-cloud-release,
+        azure-container-registry-release,
+      ]
     if: |
       always() && 
       needs.config.outputs.has_slack_webhook == 'true' &&
       needs.github-release.result == 'success' &&
       (needs.docker-hub-release.result == 'success' || needs.docker-hub-release.result == 'skipped') &&
-      (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped')  &&
+      (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
+      (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
       needs.config.outputs.is_release_branch == 'true'
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
@@ -936,8 +1170,11 @@ jobs:
       GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
       GCP_REGION: ${{ needs.config.outputs.gcp_region }}
       GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+      ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
+      ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
       DOCKER_ENABLED: ${{ needs.config.outputs.docker_has_publish_config }}
       GCP_ENABLED: ${{ needs.config.outputs.gcp_has_credentials }}
+      ACR_ENABLED: ${{ needs.config.outputs.acr_has_credentials }}
     steps:
       - name: Generate notification message
         id: generate_message
@@ -982,6 +1219,12 @@ jobs:
           # Add GCP link if enabled
           if [ "$GCP_ENABLED" = "true" ]; then
             jq '.blocks[2].text.text += "\n• <https://console.cloud.google.com/artifacts/docker/'"$GCP_PROJECT_ID"'/'"$GCP_REGION"'/'"$GCP_REPO"'/'"$IMAGE_NAME"'|Google Cloud Artifact Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
+          fi
+
+          # Add ACR link if enabled
+          if [ "$ACR_ENABLED" = "true" ]; then
+            REGISTRY_NAME=$(echo "$ACR_REGISTRY" | cut -d'.' -f1)
+            jq '.blocks[2].text.text += "\n• <https://portal.azure.com/#view/Microsoft_Azure_ContainerRegistries/RepositoryBlade/id/%2Fsubscriptions%2F~%2FresourceGroups%2F~%2Fproviders%2FMicrosoft.ContainerRegistry%2Fregistries%2F'"$REGISTRY_NAME"'/repository/'"$ACR_REPOSITORY"'|Azure Container Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
           fi
 
           # Store payload in output
