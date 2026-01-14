@@ -155,6 +155,7 @@ jobs:
       # Security configuration
       enable_security_scan: ${{ steps.store_inputs.outputs.enable_security_scan }}
       enable_security_upload: ${{ steps.store_inputs.outputs.enable_security_upload }}
+      enable_sbom: ${{ steps.store_inputs.outputs.enable_sbom }}
 
     steps:
       - name: Store inputs as outputs
@@ -713,6 +714,7 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -720,6 +722,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download SBOM Artifact
+        if: env.ENABLE_SBOM == 'true'
         uses: actions/download-artifact@v6
         with:
           name: sbom
@@ -831,7 +834,7 @@ jobs:
           name: ${{ env.RELEASE_VERSION }}
           body_path: changelog.txt
           prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
-          files: sbom.json
+          files: ${{ env.ENABLE_SBOM == 'true' && 'sbom.json' || '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
