@@ -35,41 +35,42 @@ jobs:
 
 ### Inputs
 
-| Input                     | Description                        | Default                   | Required       |
-| ------------------------- | ---------------------------------- | ------------------------- | -------------- |
-| `image_name`              | Docker image name                  | -                         | ✅             |
-| **Docker Hub**            |
-| `docker_login`            | Docker Hub username                | -                         | For Docker Hub |
-| `docker_org`              | Docker Hub organization            | -                         | For Docker Hub |
-| `docker_repo`             | Docker Hub repository              | -                         | For Docker Hub |
-| **GCP Artifact Registry** |
-| `gcp_region`              | GCP region (e.g., `us-central1`)   | -                         | For GCP        |
-| `gcp_project_id`          | GCP project ID                     | -                         | For GCP        |
-| `gcp_repo`                | Artifact Registry repo name        | -                         | For GCP        |
-| `gcp_workload_identity_provider` | Workload Identity Provider resource name | -              | For GCP        |
-| `gcp_service_account`     | Service account email for WIF      | -                         | For GCP        |
-| **Azure Container Registry** |
-| `acr_registry`            | ACR registry name (e.g., `myregistry.azurecr.io`) | -              | For ACR        |
-| `acr_repository`          | ACR repository name                | -                         | For ACR        |
-| `azure_client_id`         | Azure Client ID for OIDC           | -                         | For ACR        |
-| `azure_tenant_id`         | Azure Tenant ID for OIDC           | -                         | For ACR        |
-| `azure_subscription_id`   | Azure Subscription ID for OIDC     | -                         | For ACR        |
-| **Build**                 |
-| `release_branch`          | Branch that triggers releases      | `latest`                  |                |
-| `dockerfile_path`         | Path to Dockerfile                 | `./Dockerfile`            |                |
-| `build_platforms`         | Platforms (comma-separated)        | `linux/amd64,linux/arm64` |                |
-| `build_args`              | Build args (`ARG1=val1,ARG2=val2`) | -                         |                |
-| `version_config_path`     | GitVersion config path             | `ci/git-version.yml`      |                |
-| **Security**              |
-| `enable_security_scan`    | Run vulnerability scan             | `true`                    |                |
-| `enable_security_upload`  | Upload to GitHub Security          | `true`                    |                |
+| Input                            | Description                                       | Default                   | Required       |
+| -------------------------------- | ------------------------------------------------- | ------------------------- | -------------- |
+| `image_name`                     | Docker image name                                 | -                         | ✅             |
+| **Docker Hub**                   |
+| `docker_login`                   | Docker Hub username                               | -                         | For Docker Hub |
+| `docker_org`                     | Docker Hub organization                           | -                         | For Docker Hub |
+| `docker_repo`                    | Docker Hub repository                             | -                         | For Docker Hub |
+| **GCP Artifact Registry**        |
+| `gcp_region`                     | GCP region (e.g., `us-central1`)                  | -                         | For GCP        |
+| `gcp_project_id`                 | GCP project ID                                    | -                         | For GCP        |
+| `gcp_repo`                       | Artifact Registry repo name                       | -                         | For GCP        |
+| `gcp_workload_identity_provider` | Workload Identity Provider resource name          | -                         | For GCP        |
+| `gcp_service_account`            | Service account email for WIF                     | -                         | For GCP        |
+| **Azure Container Registry**     |
+| `acr_registry`                   | ACR registry name (e.g., `myregistry.azurecr.io`) | -                         | For ACR        |
+| `acr_repository`                 | ACR repository name                               | -                         | For ACR        |
+| `azure_client_id`                | Azure Client ID for OIDC                          | -                         | For ACR        |
+| `azure_tenant_id`                | Azure Tenant ID for OIDC                          | -                         | For ACR        |
+| `azure_subscription_id`          | Azure Subscription ID for OIDC                    | -                         | For ACR        |
+| **Build**                        |
+| `release_branch`                 | Branch that triggers releases                     | `latest`                  |                |
+| `dockerfile_path`                | Path to Dockerfile                                | `./Dockerfile`            |                |
+| `build_platforms`                | Platforms (comma-separated)                       | `linux/amd64,linux/arm64` |                |
+| `build_args`                     | Build args (`ARG1=val1,ARG2=val2`)                | -                         |                |
+| `version_config_path`            | GitVersion config path                            | `ci/git-version.yml`      |                |
+| **Security**                     |
+| `enable_security_scan`           | Run vulnerability scan                            | `true`                    |                |
+| `enable_security_upload`         | Upload to GitHub Security                         | `true`                    |                |
+| `enable_sbom`                    | Generate and upload SBOM                          | `true`                    |                |
 
 ### Secrets
 
-| Secret              | Description                          | Required       |
-| ------------------- | ------------------------------------ | -------------- |
-| `docker_token`      | Docker Hub token                     | For Docker Hub |
-| `slack_webhook_url` | Slack webhook URL                    | For Slack      |
+| Secret              | Description       | Required       |
+| ------------------- | ----------------- | -------------- |
+| `docker_token`      | Docker Hub token  | For Docker Hub |
+| `slack_webhook_url` | Slack webhook URL | For Slack      |
 
 **Note:** Both GCP and Azure authentication now use OIDC/Workload Identity Federation (keyless auth). JSON key/credential authentication is no longer supported.
 
@@ -77,13 +78,14 @@ jobs:
 
 This matrix maps each registry type to its required configuration for AI-assisted workflow generation:
 
-| Registry Type | Mandatory Inputs | Mandatory Secrets | Required IAM Role/Permission |
-|--------------|------------------|-------------------|------------------------------|
-| **Docker Hub** | `docker_login`, `docker_org`, `docker_repo` | `docker_token` | Token with push permissions |
-| **GCP Artifact Registry** | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` | None (OIDC) | `roles/artifactregistry.writer` on service account |
-| **Azure Container Registry** | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id` | None (OIDC) | `AcrPush` role on service principal |
+| Registry Type                | Mandatory Inputs                                                                                    | Mandatory Secrets | Required IAM Role/Permission                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------- |
+| **Docker Hub**               | `docker_login`, `docker_org`, `docker_repo`                                                         | `docker_token`    | Token with push permissions                        |
+| **GCP Artifact Registry**    | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` | None (OIDC)       | `roles/artifactregistry.writer` on service account |
+| **Azure Container Registry** | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id`     | None (OIDC)       | `AcrPush` role on service principal                |
 
 **Key Points:**
+
 - **Docker Hub**: Requires username, organization, repository name, and a personal access token with push permissions
 - **GCP**: Uses Workload Identity Federation (keyless). Service account must have Artifact Registry Writer role
 - **Azure**: Uses OIDC authentication (keyless). Service principal must have AcrPush role on the registry
@@ -104,22 +106,23 @@ Example: `build_args: "VERSION={{version}},ENV=production"`
 
 ## Publishing
 
-| Target             | When                     | Tags                                                     | Requirements                                                  |
-| ------------------ | ------------------------ | -------------------------------------------------------- | ------------------------------------------------------------- |
-| **GitHub Release** | Release branch           | Version tag                                              | None                                                          |
-| **Docker Hub**     | Release branch           | `version`, `latest`                                      | `docker_login`, `docker_org`, `docker_repo`, `docker_token`   |
+| Target             | When                     | Tags                                                     | Requirements                                                                                        |
+| ------------------ | ------------------------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **GitHub Release** | Release branch           | Version tag                                              | None                                                                                                |
+| **Docker Hub**     | Release branch           | `version`, `latest`                                      | `docker_login`, `docker_org`, `docker_repo`, `docker_token`                                         |
 | **GCP**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` |
-| **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id` |
-| **Slack**          | After release            | -                                                        | `slack_webhook_url`                                           |
+| **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id`     |
+| **Slack**          | After release            | -                                                        | `slack_webhook_url`                                                                                 |
 
 ## Security & Changelog
 
 **Security (Trivy):**
 
-- Generates SBOM (SPDX format)
+- Generates SBOM (SPDX format) - attached to GitHub releases
 - Scans for CRITICAL/HIGH vulnerabilities
 - Uploads to GitHub Security (release branches)
-- Disable: `enable_security_scan: "false"`
+- Disable scanning: `enable_security_scan: "false"`
+- Disable SBOM: `enable_sbom: "false"`
 
 **Changelog:**
 
@@ -294,6 +297,7 @@ az ad app federated-credential create \
 ```
 
 **Use when:**
+
 - Production environments
 - You only publish from release branches
 - Following principle of least privilege
@@ -324,6 +328,7 @@ az ad app federated-credential create \
 ```
 
 **Use when:**
+
 - Development/test subscriptions
 - You need to test builds from feature branches
 - Convenience outweighs strict security
@@ -391,7 +396,7 @@ with:
 Use this template with AI coding assistants to generate a complete workflow configuration:
 
 ```
-Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master 
+Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master
 template to create a Docker release workflow for my containerized application.
 
 Requirements:
@@ -412,8 +417,9 @@ Verify that all mandatory inputs from the matrix are included and properly confi
 ```
 
 **Example usage:**
+
 ```
-Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master 
+Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master
 template to create a Docker release workflow for my containerized application.
 
 Requirements:
