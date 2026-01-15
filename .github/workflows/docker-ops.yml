@@ -658,6 +658,7 @@ jobs:
         if: env.ENABLE_SBOM == 'true'
         run: |
           export TRIVY_DISABLE_VEX_NOTICE=true
+          export TMPDIR=/github/home/tmp 
           max_retries=5
           attempt=1
           success=false
