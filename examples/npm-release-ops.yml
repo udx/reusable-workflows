@@ -6,7 +6,7 @@ on:
       - latest
 
 jobs:
-  release:
+  standard-release:
     permissions:
       contents: write
       id-token: write

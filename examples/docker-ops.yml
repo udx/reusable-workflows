@@ -8,11 +8,9 @@ on:
 jobs:
   # ===========================================================================
   # Example 1: Minimal - GitHub Release Only
-  # ===========================================================================
   # USE CASE: Build and scan Docker image, create GitHub release with SBOM
   # REQUIRED: Only image_name
   # PUBLISHES TO: GitHub Releases only (no external registries)
-  # AI NOTE: Use this when you only need CI/CD without registry publishing
 
   # minimal:
   #   uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
@@ -21,11 +19,9 @@ jobs:
 
   # ===========================================================================
   # Example 2: Docker Hub Publishing
-  # ===========================================================================
   # USE CASE: Publish to Docker Hub with version and latest tags
   # REQUIRED: image_name, docker_login, docker_org, docker_repo, docker_token secret
   # PUBLISHES TO: Docker Hub + GitHub Releases
-  # AI NOTE: Check Dependency Matrix in docs/docker-ops.md for all mandatory inputs
 
   # docker-hub:
   #   uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
@@ -39,12 +35,9 @@ jobs:
 
   # ===========================================================================
   # Example 3: Multi-Registry (Docker Hub + GCP + ACR + Slack)
-  # ===========================================================================
   # USE CASE: Enterprise deployment to multiple cloud registries with notifications
   # REQUIRED: All inputs for each target registry (see Dependency Matrix in docs/docker-ops.md)
   # PUBLISHES TO: Docker Hub + GCP Artifact Registry + Azure Container Registry + GitHub Releases
-  # SECURITY: Requires id-token: write permission for GCP and ACR OIDC authentication
-  # AI NOTE: All IDs below are fake examples - replace with your actual values
 
   multi-registry:
     permissions:
@@ -89,41 +82,6 @@ jobs:
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-# ===========================================================================
-# Quick Reference
-# ===========================================================================
-#
-# AI-Friendly Configuration:
-#   - See Dependency & Permission Matrix in docs/docker-ops.md
-#   - Matrix shows all mandatory inputs/secrets/roles per registry type
-#   - Use AI Implementation Prompt template in docs for workflow generation
-#
-# Versioning:
-#   - Auto-detected from package.json or GitVersion (ci/git-version.yml)
-#   - No manual version input needed
-#
-# Placeholders in build_args:
-#   - {{version}} = release version (e.g., 1.2.3)
-#   - {{branch}} = current branch name (e.g., main, feature/xyz)
-#   - Example: build_args: APP_VERSION={{version}},BRANCH={{branch}}
-#
-# Authentication Setup:
-#   - DOCKER_TOKEN: Personal access token from https://hub.docker.com/settings/security
-#   - GCP: Workload Identity Federation (keyless OIDC)
-#     * Requires: id-token: write permission
-#     * Service account needs: roles/artifactregistry.writer
-#     * Setup guide: docs/docker-ops.md "GCP Workload Identity Federation Setup"
-#   - Azure: OIDC with federated credentials (keyless)
-#     * Requires: id-token: write permission
-#     * Service principal needs: AcrPush role
-#     * Security options: Strict (single branch) or Flexible (wildcard)
-#     * Setup guide: docs/docker-ops.md "Azure OIDC Setup"
-#   - SLACK_WEBHOOK_URL: Optional, from https://api.slack.com/messaging/webhooks
-#
-# Changelog:
-#   - Create changes.md with version entries (### 1.2.0)
-#   - Or auto-generated from git commits since last tag
-#
+
 # Full Documentation:
 #   - See docs/docker-ops.md for complete setup guides, troubleshooting, and best practices
-#   - AI Implementation Prompt template available for generating workflow configurations

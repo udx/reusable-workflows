@@ -108,6 +108,23 @@ else
     exit 1
 fi
 
+# Test Case 6: Configuration Presets
+echo -e "\n${BLUE}[Test 6] Configuration Presets${NC}"
+TEST6_DIR="$TEST_TEMP_DIR/presets"
+mkdir -p "$TEST6_DIR"
+cd "$TEST6_DIR"
+
+# Run CLI with --preset
+node "$CLI_DIR/index.js" docker-ops --non-interactive --preset "Minimal"
+
+if grep -q "uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master" ".github/workflows/docker-ops.yml" && grep -q "image_name: \"\?my-app\"\?" ".github/workflows/docker-ops.yml"; then
+    echo -e "${GREEN}✅ Successfully generated manifest from preset${NC}"
+else
+    echo -e "❌ Preset-based generation failed (Check .github/workflows/docker-ops.yml content)"
+    cat .github/workflows/docker-ops.yml
+    exit 1
+fi
+
 echo -e "\n${GREEN}✨ All CLI UX Tests Passed!${NC}"
 
 # Cleanup

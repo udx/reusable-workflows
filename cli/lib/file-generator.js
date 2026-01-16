@@ -47,39 +47,45 @@ export class FileGenerator {
   }
 
   generateWorkflowManifest(template, answers, ref = 'master') {
-    // Read example file as base
-    const exampleContent = readFileSync(template.examplesPath, 'utf8');
-    const example = yaml.load(exampleContent);
+    // Determine triggers (use template default or default to main push)
+    const triggers = template.defaultTriggers || { push: { branches: ['main'] }, workflow_dispatch: null };
 
-    // Find the job that uses the reusable workflow
-    let workflowJob = null;
-    for (const [jobName, jobConfig] of Object.entries(example.jobs || {})) {
-      if (jobConfig.uses) {
-        workflowJob = jobConfig;
-        break;
-      }
-    }
+    // Distinguish between inputs and secrets
+    const workflowSecrets = template.secrets || {};
+    const withValues = {};
+    const secretValues = {};
 
-    // Update the 'uses' reference
-    if (workflowJob.uses) {
-      const base = workflowJob.uses.split('@')[0];
-      workflowJob.uses = `${base}@${ref}`;
-    }
-
-    // Update the 'with' section with user answers and detected values
-    if (!workflowJob.with) {
-      workflowJob.with = {};
-    }
-    
-    // Merge answers into the existing 'with' section
     for (const [key, value] of Object.entries(answers)) {
       if (value !== undefined) {
-        workflowJob.with[key] = value;
+        if (workflowSecrets[key]) {
+          secretValues[key] = value;
+        } else {
+          withValues[key] = value;
+        }
       }
     }
 
-    // Generate the manifest
-    return yaml.dump(example, {
+    const manifest = {
+      name: template.name,
+      on: triggers,
+      permissions: {
+        contents: 'write',
+        'id-token': 'write'
+      },
+      jobs: {
+        release: {
+          uses: `udx/reusable-workflows/.github/workflows/${template.id}.yml@${ref}`,
+          with: withValues,
+          secrets: Object.keys(secretValues).length > 0 ? secretValues : undefined
+        }
+      }
+    };
+
+    // Remove empty sections
+    if (Object.keys(manifest.jobs.release.with).length === 0) delete manifest.jobs.release.with;
+    if (!manifest.jobs.release.secrets) delete manifest.jobs.release.secrets;
+
+    return yaml.dump(manifest, {
       lineWidth: -1,
       noRefs: true,
       quotingType: '"',

@@ -57,6 +57,10 @@ class WorkflowGenerator {
     const refIdx = args.findIndex(arg => arg === '--ref' || arg === '-r');
     const cliRef = refIdx !== -1 ? args[refIdx + 1] : null;
 
+    // Support preset selection: --preset <name> or -p <name>
+    const presetIdxCmd = args.findIndex(arg => arg === '--preset' || arg === '-p');
+    const cliPresetName = presetIdxCmd !== -1 ? args[presetIdxCmd + 1] : null;
+
     if (isHelp) {
       this.ui.printHelp();
       return;
@@ -83,35 +87,61 @@ class WorkflowGenerator {
     }
 
     const template = this.templates.find(t => t.id === templateId);
-    const inputs = this.templateLoader.parseWorkflowInputs(template);
+    template.inputs = this.templateLoader.parseWorkflowInputs(template);
+    template.secrets = this.templateLoader.parseWorkflowSecrets(template);
+    const inputs = template.inputs;
     
-    // Auto-detection phase
+    // Auto-detection phase (existing files)
     const detectedValues = this.configDetector.detectExistingConfig(templateId);
     if (Object.keys(detectedValues).length > 0) {
       console.log(chalk.green(`\n✨ Auto-detected existing configuration from .github/workflows\n`));
     }
+
+    // Preset selection
+    let presetValues = {};
+    if (template.presets && template.presets.length > 0) {
+      if (cliPresetName) {
+        const preset = template.presets.find(p => p.name.toLowerCase().includes(cliPresetName.toLowerCase()));
+        if (preset) {
+          presetValues = { ...preset.values, ...preset.secrets };
+          console.log(chalk.green(`\n✅ Applied preset: ${preset.name}\n`));
+        } else {
+          console.warn(chalk.yellow(`\n⚠ Preset "${cliPresetName}" not found. Falling back to manual configuration.\n`));
+        }
+      } else if (Object.keys(detectedValues).length === 0 && !isNonInteractive) {
+        this.ui.printSectionHeader(this.config.ui.icons.group, 'Configuration Preset');
+        const { presetIdx } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'presetIdx',
+            message: 'Choose a starting configuration:',
+            choices: [
+              ...template.presets.map((p, i) => ({ name: p.name, value: i })),
+              { name: 'Custom (Manual Setup)', value: -1 }
+            ]
+          }
+        ]);
+        
+        if (presetIdx !== -1) {
+          const preset = template.presets[presetIdx];
+          presetValues = { ...preset.values, ...preset.secrets };
+          console.log(chalk.green(`\n✅ Applied preset: ${preset.name}\n`));
+        }
+      }
+    }
+
+    // Merge detected and preset values
+    const mergedDefaults = { ...presetValues, ...detectedValues };
+
     // Configuration
     const groupedInputs = this.inputGrouper.groupInputsByPrefix(inputs);
     
-    // Version / Ref selection
-    let versionRef = cliRef;
-    if (!versionRef && !isNonInteractive) {
-      const { selectedRef } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'selectedRef',
-          message: 'Workflow reference (branch/tag):',
-          default: 'master'
-        }
-      ]);
-      versionRef = selectedRef;
-    } else if (!versionRef) {
-      versionRef = 'master';
-    }
+    // Version / Ref selection (fixed to master / cliRef)
+    const versionRef = cliRef || 'master';
 
     // Common inputs
     this.ui.printSectionHeader(icons.config, 'Configuration');
-    const commonAnswers = await this.promptInputs(groupedInputs.common, detectedValues, isNonInteractive);
+    const commonAnswers = await this.promptInputs(groupedInputs.common, mergedDefaults, isNonInteractive);
 
     // Optional component groups
     const prefixGroups = Object.keys(groupedInputs).filter(key => key !== 'common');
@@ -130,7 +160,7 @@ class WorkflowGenerator {
             choices: prefixGroups.map(key => ({
               name: groupedInputs[key][0].prefix,
               value: key,
-              checked: selectedGroups.includes(key) || groupedInputs[key].some(input => detectedValues[input.name] !== undefined)
+              checked: selectedGroups.includes(key) || groupedInputs[key].some(input => mergedDefaults[input.name] !== undefined)
             }))
           }
         ]);
@@ -139,7 +169,7 @@ class WorkflowGenerator {
       } else {
         // In non-interactive mode, select groups that have detected inputs
         selectedGroups = prefixGroups.filter(key => 
-          groupedInputs[key].some(input => detectedValues[input.name] !== undefined)
+          groupedInputs[key].some(input => mergedDefaults[input.name] !== undefined)
         );
       }
 
@@ -150,7 +180,7 @@ class WorkflowGenerator {
         if (!isNonInteractive) {
           this.ui.printSectionHeader(icons.group, `${groupName} Configuration`);
         }
-        const answers = await this.promptInputs(groupInputs, detectedValues, isNonInteractive);
+        const answers = await this.promptInputs(groupInputs, mergedDefaults, isNonInteractive);
         groupAnswers = { ...groupAnswers, ...answers };
       }
     }

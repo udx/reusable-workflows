@@ -15,6 +15,9 @@ export const CLI_CONFIG = {
     // Extract short description from docs: <!-- short: description -->
     docsShortDescription: /<!--\s*short:\s*(.+?)\s*-->/,
     
+    // Extract presets from examples: ## PRESET: Name
+    presetPattern: /##\s*PRESET:\s*(.+)/,
+    
     // Group inputs by prefix pattern: "Prefix: Description"
     inputPrefixPattern: /^([A-Z][A-Za-z\s]+):\s/,
     
