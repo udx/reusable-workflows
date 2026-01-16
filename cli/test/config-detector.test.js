@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 test('ConfigDetector - detectExistingConfig', () => {
   // Point to our mock directory instead of real CWD
-  const mockRepoRoot = join(__dirname, 'mocks');
+  const mockRepoRoot = join(__dirname, 'cases/_fixtures/unit-mocks');
   const detector = new ConfigDetector(mockRepoRoot);
   
   // Override the internal workflowDir for testing

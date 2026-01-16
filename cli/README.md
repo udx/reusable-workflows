@@ -22,15 +22,19 @@ reusable-workflows [template-id] [options]
 ## Features
 
 - **Smart Auto-Detection**: Scans `.github/workflows` to pre-fill existing configurations.
+- **Dynamic Presets**: Automatically extracts configuration presets (e.g., GCR, ACR) from example files.
 - **Fast-Path Flow**: Skips redundant prompts and moves straight to a manifest preview.
 - **One-Glance Preview**: Review the generated YAML in your terminal before writing.
-- **Opt-in Setup Guides**: Documentation (`SETUP-*.md`) is generated only when requested.
-- **Non-Interactive Mode**: Support for headless environments and scripts.
+- **Non-Interactive Mode**: Full support for headless environments and CI/CD scripts.
+- **Asset-Driven Testing**: Built-in test suite verifies CLI output against source templates and examples.
 
 ## Options
 
 - `[template-id]`: Optional positional argument to skip selection (e.g., `docker-ops`).
 - `-n, --non-interactive`: Use detected/default values without prompting.
+- `-p, --preset [name]`: Apply a specific configuration preset (e.g., `GCR`, `Docker Hub`).
+- `-r, --ref [version]`: Pin the reusable workflow to a specific Git ref/version.
+- `-o, --output [path]`: Specify custom destination for the manifest.
 - `-h, --help`: Show usage instructions.
 
 ## Metadata Architecture

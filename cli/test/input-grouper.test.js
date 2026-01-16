@@ -26,7 +26,7 @@ test('InputGrouper - extractPrompt', () => {
   const grouper = new InputGrouper(CLI_CONFIG);
   
   const prompt1 = grouper.extractPrompt('Docker Hub: Username (required)');
-  assert.strictEqual(prompt1, 'Username');
+  assert.strictEqual(prompt1, 'Username (required)');
 
   const prompt2 = grouper.extractPrompt('Image name');
   assert.strictEqual(prompt2, 'Image name');

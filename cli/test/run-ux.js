@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '../..');
 const TEMP_DIR = join(__dirname, 'ux-temp-runner');
-const CASES_DIR = join(__dirname, 'ux-cases');
+const CASES_DIR = join(__dirname, 'cases');
 
 /**
  * Asset-Driven UX Test Runner
@@ -56,6 +56,7 @@ class UXTestRunner {
     let results = [];
     const list = readdirSync(dir);
     for (const file of list) {
+      if (file.startsWith('_')) continue; // Ignore hidden/fixture dirs
       const path = join(dir, file);
       const stat = lstatSync(path);
       if (stat && stat.isDirectory()) {
@@ -77,7 +78,7 @@ class UXTestRunner {
 
     // 0. Setup fixture if specified
     if (testCase.setup) {
-      const fixtureDir = join(REPO_ROOT, 'cli/test/cases', testCase.setup);
+      const fixtureDir = join(CASES_DIR, '_fixtures', testCase.setup);
       if (existsSync(fixtureDir)) {
         execSync(`cp -r "${fixtureDir}"/. "${testWorkDir}/"`);
       }
