@@ -19,3 +19,8 @@ Thumbs.db
 # Project
 cli/test/ux-temp/
 SETUP-*.md
+
+# CLI bundled assets (copied during publish)
+cli/.github/
+cli/docs/
+cli/examples/

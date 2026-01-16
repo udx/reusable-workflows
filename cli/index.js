@@ -22,7 +22,12 @@ const __dirname = dirname(__filename);
 class WorkflowGenerator {
   constructor() {
     this.config = CLI_CONFIG;
-    this.repoRoot = join(__dirname, '..');
+    
+    // Support both local development and bundled npm package
+    // Local: __dirname is /cli, templates are in ..
+    // Bundled: templates are copied into /cli
+    const bundledWorkflows = join(__dirname, this.config.components.workflow.dir);
+    this.repoRoot = existsSync(bundledWorkflows) ? __dirname : join(__dirname, '..');
     
     // Initialize modules
     this.templateLoader = new TemplateLoader(this.repoRoot, this.config);

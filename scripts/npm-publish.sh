@@ -52,6 +52,16 @@ if [ -n "$BUILD_COMMAND" ]; then
     eval "$BUILD_COMMAND"
 fi
 
+# Bundle templates if we are in the cli directory
+if [ -d "../.github/workflows" ] && [ "$(basename "$(pwd)")" == "cli" ]; then
+    echo -e "📦 Bundling templates into CLI package..."
+    cp -r ../.github ./
+    cp -r ../docs ./
+    cp -r ../examples ./
+    # We want to remove the _ prefixed files from the bundled .github/workflows
+    find .github/workflows -name "_*" -delete
+fi
+
 # Publish to NPM
 echo -e "🚢 Publishing to NPM..."
 PUBLISH_ARGS=()
@@ -71,5 +81,11 @@ fi
 # If NPM_TOKEN is provided, ensure it's used (though npm usually picks it up from env or .npmrc)
 # The orchestration layer (GH Action) should handle .npmrc setup for NODE_AUTH_TOKEN
 npm publish "${PUBLISH_ARGS[@]}"
+
+# Cleanup bundled assets
+if [ -d "../.github/workflows" ] && [ "$(basename "$(pwd)")" == "cli" ]; then
+    echo -e "🧹 Cleaning up bundled templates..."
+    rm -rf .github docs examples
+fi
 
 echo -e "${GREEN}✅ Successfully published ${PACKAGE_NAME}@${PACKAGE_VERSION}${NC}"
