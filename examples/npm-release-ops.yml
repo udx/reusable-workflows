@@ -1,0 +1,22 @@
+name: Release Package
+
+on:
+  push:
+    branches:
+      - latest
+
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
+    with:
+      node_version: "20"
+      build_command: "npm run build"
+      test_command: "npm test"
+      release_branch: "latest"
+      provenance: "true"
+    secrets:
+      npm_token: ${{ secrets.NPM_TOKEN }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
