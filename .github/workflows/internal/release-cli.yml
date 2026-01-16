@@ -1,0 +1,17 @@
+name: Release CLI
+on:
+  workflow_call:
+    secrets:
+      npm_token:
+        required: true
+
+jobs:
+  release:
+    uses: ./.github/workflows/npm-release-ops.yml
+    with:
+      registry_url: https://registry.npmjs.org/
+      build_command: "" # CLI doesn't need build
+      test_command: "npm test"
+      working_directory: "cli"
+    secrets:
+      npm_token: ${{ secrets.npm_token }}
