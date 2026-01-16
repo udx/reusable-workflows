@@ -5,47 +5,47 @@ on:
   workflow_call:
     inputs:
       image_name:
-        description: "Primary identifier; must be lowercase, URL-safe, and matches your registry repository name"
+        description: "Docker image name (lowercase, URL-safe)"
         required: true
         type: string
       gcp_region:
-        description: "GCP region for Artifact Registry (Required if publishing to GCP)"
+        description: "GCP: Region for Artifact Registry (Required if publishing to GCP)"
         required: false
         type: string
       gcp_project_id:
-        description: "GCP project ID (Required if publishing to GCP)"
+        description: "GCP: Project ID (Required if publishing to GCP)"
         required: false
         type: string
       gcp_repo:
-        description: "GCP Artifact Registry repository name (Required if publishing to GCP)"
+        description: "GCP: Artifact Registry repository name (Required if publishing to GCP)"
         required: false
         type: string
       gcp_workload_identity_provider:
-        description: "GCP Workload Identity Provider (format: projects/NUM/locations/global/workloadIdentityPools/POOL/providers/PROV) (Required if publishing to GCP)"
+        description: "GCP: Workload Identity Provider (format: projects/NUM/locations/global/workloadIdentityPools/POOL/providers/PROV) (Required if publishing to GCP)"
         required: false
         type: string
       gcp_service_account:
-        description: "GCP Service Account email for Workload Identity Federation (Required if publishing to GCP)"
+        description: "GCP: Service Account email for Workload Identity Federation (Required if publishing to GCP)"
         required: false
         type: string
       acr_registry:
-        description: "Azure Container Registry name (e.g., myregistry.azurecr.io) (Required if publishing to ACR)"
+        description: "ACR: Registry name (e.g., myregistry.azurecr.io) (Required if publishing to ACR)"
         required: false
         type: string
       acr_repository:
-        description: "ACR repository name (Required if publishing to ACR)"
+        description: "ACR: Repository name (Required if publishing to ACR)"
         required: false
         type: string
       azure_client_id:
-        description: "Azure Client ID for OIDC authentication (Required if publishing to ACR)"
+        description: "ACR: Azure Client ID for OIDC authentication (Required if publishing to ACR)"
         required: false
         type: string
       azure_tenant_id:
-        description: "Azure Tenant ID for OIDC authentication (Required if publishing to ACR)"
+        description: "ACR: Azure Tenant ID for OIDC authentication (Required if publishing to ACR)"
         required: false
         type: string
       azure_subscription_id:
-        description: "Azure Subscription ID for OIDC authentication (Required if publishing to ACR)"
+        description: "ACR: Azure Subscription ID for OIDC authentication (Required if publishing to ACR)"
         required: false
         type: string
       release_branch:
@@ -89,23 +89,23 @@ on:
         default: "true"
         type: string
       docker_login:
-        description: "Docker Hub username (Required if publishing to Docker Hub)"
+        description: "Docker Hub: Username (Required if publishing to Docker Hub)"
         required: false
         type: string
       docker_org:
-        description: "Docker Hub organization name (Required if publishing to Docker Hub)"
+        description: "Docker Hub: Organization name (Required if publishing to Docker Hub)"
         required: false
         type: string
       docker_repo:
-        description: "Docker Hub repository name (Required if publishing to Docker Hub)"
+        description: "Docker Hub: Repository name (Required if publishing to Docker Hub)"
         required: false
         type: string
     secrets:
       docker_token:
-        description: "Docker Hub token for authentication (Required if publishing to Docker Hub)"
+        description: "Docker Hub: Token for authentication (Required if publishing to Docker Hub)"
         required: false
       slack_webhook_url:
-        description: "Slack webhook URL for notifications (Optional, for release notifications)"
+        description: "Slack: Webhook URL for notifications (Optional, for release notifications)"
         required: false
 
 jobs:

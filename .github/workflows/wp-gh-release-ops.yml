@@ -5,15 +5,15 @@ on:
   workflow_call:
     inputs:
       tag:
-        description: 'Release tag (e.g. 1.2.3a)'
+        description: 'GitHub: Release tag (e.g. 1.2.3a)'
         required: true
         type: string
       version:
-        description: 'Release version (e.g. 1.2.3), default: latest'
+        description: 'WordPress: Release version (e.g. 1.2.3), default: latest'
         required: false
         type: string
       prerelease:
-        description: 'Pre-release version (e.g. RC1, beta, etc...)'
+        description: 'GitHub: Pre-release version (e.g. RC1, beta, etc...)'
         required: false
         type: string
 

@@ -1,4 +1,7 @@
 # Docker Operations Workflow
+<!-- short: Docker image release pipeline with multi-registry support -->
+
+Build, scan, and publish Docker images to multiple registries with security scanning and SBOM generation.
 
 Reusable workflow for building, scanning, and publishing Docker images to multiple registries.
 
@@ -9,6 +12,47 @@ Reusable workflow for building, scanning, and publishing Docker images to multip
 - Publish to Docker Hub, GCP Artifact Registry, and/or Azure Container Registry
 - Slack notifications
 - Automatic versioning (package.json or GitVersion)
+
+## CLI Generator
+
+Generate workflow configuration interactively:
+
+```bash
+npm install -g @udx/reusable-workflows
+reusable-workflows
+```
+
+### Flow
+
+1. **Select template** → docker-ops
+2. **Common inputs** → Image name, release branch, dockerfile path, build platforms
+3. **Select registries** → Docker Hub, GCP, ACR (multi-select)
+4. **Registry configuration** → Prompted for selected registries only
+5. **Output** → `.github/workflows/docker-ops.yml` + `SETUP-docker-ops.md`
+
+### Registry Prompts
+
+**Docker Hub:**
+- Username → `${{ vars.DOCKER_USERNAME }}`
+- Organization
+- Repository
+- Secret: `DOCKER_TOKEN`
+
+**GCP Artifact Registry:**
+- Region
+- Project ID
+- Repository name
+- Workload Identity Provider
+- Service account email
+- Permissions: `id-token: write`
+
+**Azure Container Registry:**
+- Registry (e.g., myregistry.azurecr.io)
+- Repository
+- Client ID
+- Tenant ID
+- Subscription ID
+- Permissions: `id-token: write`
 
 ## Quick Start
 
