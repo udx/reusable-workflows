@@ -6,7 +6,7 @@ A minimal-friction CLI to integrate and update GitHub Actions workflows based on
 
 Run the CLI in the root of your repository to select, configure, and update workflows.
 
-### On-the-fly (Recommended)
+### On-the-fly
 Always runs the latest version without installation:
 ```bash
 npx @udx/reusable-workflows [template-id] [options]
