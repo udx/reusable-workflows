@@ -1,14 +1,5 @@
-name: Docker Release Example
-"on":
-  push:
-    branches:
-      - main
-  workflow_dispatch: null
 jobs:
-  multi-registry:
-    permissions:
-      id-token: write
-      contents: write
+  build:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: test

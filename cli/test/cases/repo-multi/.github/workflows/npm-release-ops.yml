@@ -1,0 +1,5 @@
+jobs:
+  release:
+    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
+    with:
+      working_directory: "multi-npm-dir"

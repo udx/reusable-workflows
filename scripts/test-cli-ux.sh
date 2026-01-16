@@ -41,27 +41,16 @@ fi
 # Test Case 2: Existing Configuration Detection
 echo -e "\n${BLUE}[Test 2] Existing Configuration Detection${NC}"
 TEST2_DIR="$TEST_TEMP_DIR/existing-config"
-mkdir -p "$TEST2_DIR/.github/workflows"
+mkdir -p "$TEST2_DIR"
+cp -r "$CLI_DIR/test/cases/repo-single/.github" "$TEST2_DIR/"
 cd "$TEST2_DIR"
 
-# Create a mock workflow with existing values
-cat > .github/workflows/npm-release-ops.yml <<EOF
-name: Release
-on: push
-jobs:
-  release:
-    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
-    with:
-      node_version: "22"
-      check_version_bump: false
-EOF
+# Run CLI for docker-ops - should auto-detect from the seeded file
+node "$CLI_DIR/index.js" docker-ops --non-interactive
 
-# Run CLI - it should detect node_version "22" and check_version_bump false
-node "$CLI_DIR/index.js" npm-release-ops --non-interactive
-
-# Verify detected values were preserved (by checking generated file)
-if grep -q 'node_version: "22"' .github/workflows/npm-release-ops.yml && grep -q "check_version_bump: false" .github/workflows/npm-release-ops.yml; then
-    echo -e "${GREEN}✅ Successfully detected and preserved existing configuration${NC}"
+# Verify common detected value
+if grep -q "image_name: test" ".github/workflows/docker-ops.yml"; then
+    echo -e "${GREEN}✅ Successfully detected existing configuration${NC}"
 else
     echo -e "❌ Failed to detect existing configuration"
     exit 1
@@ -99,6 +88,23 @@ if grep -q "@v1.2.3" ".github/workflows/npm-release-ops.yml"; then
     echo -e "${GREEN}✅ Successfully pinned workflow to v1.2.3${NC}"
 else
     echo -e "❌ Failed to pin workflow version"
+    exit 1
+fi
+
+# Test Case 5: Multi-Template Detection
+echo -e "\n${BLUE}[Test 5] Multi-Template Detection${NC}"
+TEST5_DIR="$TEST_TEMP_DIR/multi-template"
+mkdir -p "$TEST5_DIR"
+cp -r "$CLI_DIR/test/cases/repo-multi/.github" "$TEST5_DIR/"
+cd "$TEST5_DIR"
+
+# Run CLI for npm-release-ops and verify it ONLY picked up npm values
+node "$CLI_DIR/index.js" npm-release-ops --non-interactive
+
+if grep -q "working_directory: multi-npm-dir" ".github/workflows/npm-release-ops.yml" && ! grep -q "multi-docker-image" ".github/workflows/npm-release-ops.yml"; then
+    echo -e "${GREEN}✅ Successfully isolated configuration in multi-template repo${NC}"
+else
+    echo -e "❌ Multi-template detection failed or leaked values"
     exit 1
 fi
 
