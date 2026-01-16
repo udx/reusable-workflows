@@ -1,0 +1,9 @@
+{
+  "name": "Existing Config Detection",
+  "template": "docker-ops",
+  "args": ["--non-interactive"],
+  "setup": "repo-single",
+  "expect": {
+    "contains": ["image_name: test"]
+  }
+}

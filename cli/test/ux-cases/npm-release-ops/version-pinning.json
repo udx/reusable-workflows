@@ -1,0 +1,8 @@
+{
+  "name": "Version Pinning",
+  "template": "npm-release-ops",
+  "args": ["--non-interactive", "--ref", "v2.0.0"],
+  "expect": {
+    "contains": ["uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@v2.0.0"]
+  }
+}

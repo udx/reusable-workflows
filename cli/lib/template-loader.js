@@ -120,33 +120,42 @@ export class TemplateLoader {
       const templateId = examplesPath.split('/').pop().replace('.yml', '');
       const content = readFileSync(examplesPath, 'utf8');
       
-      // 1. Create a "normalized" version of the file where comments are stripped but indentation is preserved
+      // 1. Create a "normalized" version of the file where structural comments are stripped
+      // but purely descriptive comments are kept to maintain YAML validity.
       const lines = content.split('\n');
       const normalizedLines = lines.map(line => {
-        // Strip leading '#' but keep the indentation it was at
-        return line.replace(/^(\s*)#\s?/, '$1');
+        // Only strip the leading '#' if it's followed by something that looks like YAML structure
+        // (key: value, - list item, or block start)
+        if (line.match(/^(\s*)#\s*([\w-]+):/) || line.match(/^(\s*)#\s*- /)) {
+          return line.replace(/^(\s*)#\s?/, '$1');
+        }
+        return line;
       });
 
       // 2. Scan normalized lines for template usage
       for (let i = 0; i < normalizedLines.length; i++) {
         const line = normalizedLines[i];
         if (line.includes(`${templateId}.yml@`)) {
-          // Backtrack to find job ID
+          // Backtrack to find job ID (nearest line with LESS indentation)
           let jobId = null;
           let jobStartIndex = -1;
           let jobIndent = -1;
+          const currentIndent = line.match(/^(\s*)/)[0].length;
 
           for (let j = i - 1; j >= 0; j--) {
             const prevLine = normalizedLines[j];
             const match = prevLine.match(/^(\s*)([\w-]+):\s*$/);
             if (match) {
-              jobId = match[2];
-              jobIndent = match[1].length;
-              jobStartIndex = j;
-              break;
+              const prevIndent = match[1].length;
+              if (prevIndent < currentIndent) {
+                jobId = match[2];
+                jobIndent = prevIndent;
+                jobStartIndex = j;
+                break;
+              }
             }
-            // Stop if we hit unindented prose
-            if (prevLine.trim() !== '' && !prevLine.match(/^\s/)) break;
+            // Stop if we hit unindented prose and it's not a comment-turned-line
+            if (prevLine.trim() !== '' && !prevLine.match(/^\s/) && !lines[j].startsWith('#')) break;
           }
 
           if (jobId) {
@@ -173,6 +182,7 @@ export class TemplateLoader {
               const job = data[jobId];
               if (job && job.uses && job.uses.includes(templateId)) {
                 presets.push({
+                  id: jobId,
                   name: this.formatPresetName(jobId),
                   values: job.with || {},
                   secrets: job.secrets || {}
@@ -191,9 +201,14 @@ export class TemplateLoader {
   }
 
   formatPresetName(jobId) {
+    const acronyms = ['GCR', 'ACR', 'GCP', 'SBOM'];
     return jobId
       .split(/[-_]/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map(word => {
+        const upper = word.toUpperCase();
+        if (acronyms.includes(upper)) return upper;
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
       .join(' ');
   }
 

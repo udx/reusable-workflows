@@ -101,7 +101,9 @@ class WorkflowGenerator {
     let presetValues = {};
     if (template.presets && template.presets.length > 0) {
       if (cliPresetName) {
-        const preset = template.presets.find(p => p.name.toLowerCase().includes(cliPresetName.toLowerCase()));
+        const normalize = (s) => s.toLowerCase().replace(/[-_]/g, ' ').trim();
+        const search = normalize(cliPresetName);
+        const preset = template.presets.find(p => normalize(p.id).includes(search) || normalize(p.name).includes(search));
         if (preset) {
           presetValues = { ...preset.values, ...preset.secrets };
           console.log(chalk.green(`\n✅ Applied preset: ${preset.name}\n`));
@@ -167,9 +169,13 @@ class WorkflowGenerator {
         
         selectedGroups = result.selectedGroups;
       } else {
-        // In non-interactive mode, select groups that have detected inputs
+        // In non-interactive mode, select groups that have:
+        // 1. Detected values
+        // 2. OR required inputs (to ensure they get defaults/fallbacks)
         selectedGroups = prefixGroups.filter(key => 
-          groupedInputs[key].some(input => mergedDefaults[input.name] !== undefined)
+          groupedInputs[key].some(input => 
+            mergedDefaults[input.name] !== undefined || input.required
+          )
         );
       }
 
@@ -190,6 +196,7 @@ class WorkflowGenerator {
     }
 
     const allAnswers = { ...commonAnswers, ...groupAnswers };
+    // console.log('DEBUG allAnswers:', JSON.stringify(allAnswers, null, 2));
 
     // Preview and Confirmation
     if (!isNonInteractive) {

@@ -1,0 +1,6 @@
+{
+  "name": "WordPress Release Fresh",
+  "template": "wp-gh-release-ops",
+  "args": ["--non-interactive"],
+  "verifyRequired": true
+}

@@ -47,8 +47,14 @@ export class FileGenerator {
   }
 
   generateWorkflowManifest(template, answers, ref = 'master') {
-    // Determine triggers (use template default or default to main push)
-    const triggers = template.defaultTriggers || { push: { branches: ['main'] }, workflow_dispatch: null };
+    // Determine triggers (exclude workflow_call)
+    let triggers = { ...template.defaultTriggers };
+    delete triggers.workflow_call;
+
+    // Fallback to defaults if no valid triggers left
+    if (Object.keys(triggers).length === 0) {
+      triggers = { push: { branches: ['main'] }, workflow_dispatch: null };
+    }
 
     // Distinguish between inputs and secrets
     const workflowSecrets = template.secrets || {};

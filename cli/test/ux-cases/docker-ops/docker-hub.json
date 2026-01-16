@@ -1,0 +1,6 @@
+{
+  "name": "Docker Hub Preset",
+  "template": "docker-ops",
+  "args": ["--non-interactive", "--preset", "Docker Hub"],
+  "matchPreset": "docker-hub"
+}

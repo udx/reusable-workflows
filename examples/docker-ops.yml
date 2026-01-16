@@ -58,7 +58,7 @@ jobs:
   # All: all
   # USE CASE: Publish to Docker Hub, GCP, and Azure simultaneously
   # ===========================================================================
-  all:
+  multi-registry:
     permissions:
       id-token: write
       contents: write

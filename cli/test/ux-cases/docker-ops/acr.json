@@ -1,0 +1,6 @@
+{
+  "name": "ACR Preset",
+  "template": "docker-ops",
+  "args": ["--non-interactive", "--preset", "ACR"],
+  "matchPreset": "acr"
+}

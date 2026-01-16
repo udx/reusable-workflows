@@ -7,6 +7,7 @@ on:
       tag:
         description: 'GitHub: Release tag (e.g. 1.2.3a)'
         required: true
+        default: '1.2.3'
         type: string
       version:
         description: 'WordPress: Release version (e.g. 1.2.3), default: latest'

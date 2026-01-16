@@ -1,0 +1,6 @@
+{
+  "name": "Multi-Registry Preset",
+  "template": "docker-ops",
+  "args": ["--non-interactive", "--preset", "multi-registry"],
+  "matchPreset": "multi-registry"
+}
