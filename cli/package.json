@@ -1,6 +1,6 @@
 {
   "name": "@udx/reusable-workflows",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "CLI tool to generate GitHub Actions workflows from reusable templates",
   "type": "module",
   "main": "index.js",

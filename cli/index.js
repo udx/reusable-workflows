@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import inquirer from 'inquirer';
