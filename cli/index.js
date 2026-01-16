@@ -177,6 +177,10 @@ class WorkflowGenerator {
         const groupInputs = groupedInputs[groupKey];
         const groupName = groupInputs[0].prefix;
         
+        // Skip group if all inputs are already provided (e.g. by preset)
+        const missingInputs = groupInputs.filter(input => mergedDefaults[input.name] === undefined);
+        if (missingInputs.length === 0) continue;
+
         if (!isNonInteractive) {
           this.ui.printSectionHeader(icons.group, `${groupName} Configuration`);
         }
@@ -269,10 +273,14 @@ class WorkflowGenerator {
     const questions = inputs
       .filter(input => detectedValues[input.name] === undefined)
       .map(input => {
+        const message = input.name === 'image_name' 
+          ? 'Enter Docker image name (e.g. my-app) - used for all registry tags:' 
+          : this.inputGrouper.extractPrompt(input.description);
+
         const question = {
           type: 'input',
           name: input.name,
-          message: this.inputGrouper.extractPrompt(input.description),
+          message: message,
           default: input.default || ''
         };
         

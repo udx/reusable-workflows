@@ -115,9 +115,9 @@ mkdir -p "$TEST6_DIR"
 cd "$TEST6_DIR"
 
 # Run CLI with --preset
-node "$CLI_DIR/index.js" docker-ops --non-interactive --preset "Minimal"
+node "$CLI_DIR/index.js" docker-ops --non-interactive --preset "Docker Hub"
 
-if grep -q "uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master" ".github/workflows/docker-ops.yml" && grep -q "image_name: \"\?my-app\"\?" ".github/workflows/docker-ops.yml"; then
+if grep -q "uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master" ".github/workflows/docker-ops.yml" && grep -q "image_name: \"\?\${{ vars.IMAGE_NAME }}\"\?" ".github/workflows/docker-ops.yml"; then
     echo -e "${GREEN}✅ Successfully generated manifest from preset${NC}"
 else
     echo -e "❌ Preset-based generation failed (Check .github/workflows/docker-ops.yml content)"

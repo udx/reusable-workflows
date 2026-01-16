@@ -53,7 +53,7 @@ export class InputGrouper {
       prompt = prompt.substring(match[0].length).trim();
     }
     
-    // Remove parenthetical notes
-    return prompt.split('(')[0].trim();
+    // Return the rest of the description as the prompt
+    return prompt.trim();
   }
 }

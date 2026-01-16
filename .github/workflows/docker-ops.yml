@@ -59,12 +59,12 @@ on:
         default: "./Dockerfile"
         type: string
       build_platforms:
-        description: "Platforms to build for (comma-separated, e.g., linux/amd64,linux/arm64)"
+        description: "Platforms to build for (e.g., linux/amd64,linux/arm64). Note: multi-platform is primarily used for Docker Hub."
         required: false
         default: "linux/amd64,linux/arm64"
         type: string
       version_config_path:
-        description: "Path to GitVersion config file (only used if package.json is absent)"
+        description: "Path to GitVersion config file (used if package.json NOT defined)"
         required: false
         default: "ci/git-version.yml"
         type: string

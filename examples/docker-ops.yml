@@ -7,78 +7,80 @@ on:
 
 jobs:
   # ===========================================================================
-  # Example 1: Minimal - GitHub Release Only
-  # USE CASE: Build and scan Docker image, create GitHub release with SBOM
-  # REQUIRED: Only image_name
-  # PUBLISHES TO: GitHub Releases only (no external registries)
-
-  # minimal:
-  #   uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-  #   with:
-  #     image_name: my-app
-
+  # Docker Hub: docker-hub
+  # USE CASE: Build, scan, and publish to Docker Hub + GitHub Releases
   # ===========================================================================
-  # Example 2: Docker Hub Publishing
-  # USE CASE: Publish to Docker Hub with version and latest tags
-  # REQUIRED: image_name, docker_login, docker_org, docker_repo, docker_token secret
-  # PUBLISHES TO: Docker Hub + GitHub Releases
-
-  # docker-hub:
-  #   uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-  #   with:
-  #     image_name: my-app
-  #     docker_login: myusername
-  #     docker_org: myorg
-  #     docker_repo: my-app
-  #   secrets:
-  #     docker_token: ${{ secrets.DOCKER_TOKEN }}
-
-  # ===========================================================================
-  # Example 3: Multi-Registry (Docker Hub + GCP + ACR + Slack)
-  # USE CASE: Enterprise deployment to multiple cloud registries with notifications
-  # REQUIRED: All inputs for each target registry (see Dependency Matrix in docs/docker-ops.md)
-  # PUBLISHES TO: Docker Hub + GCP Artifact Registry + Azure Container Registry + GitHub Releases
-
-  multi-registry:
-    permissions:
-      id-token: write # Required for GCP and Azure OIDC authentication
-      contents: write # Required for GitHub releases
+  docker-hub:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
-      image_name: my-app
-      release_branch: main
-
-      # Docker Hub Configuration
-      # Required: docker_login, docker_org, docker_repo, docker_token secret
+      image_name: ${{ vars.IMAGE_NAME }}
       docker_login: ${{ vars.DOCKER_USERNAME }}
-      docker_org: myorg
-      docker_repo: my-app
+      docker_org: ${{ vars.DOCKER_ORG }}
+      docker_repo: ${{ vars.DOCKER_REPO }}
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
 
-      # GCP Artifact Registry (Workload Identity Federation - Keyless Auth)
-      # Required: All 5 inputs below
-      # Setup: See docs/docker-ops.md "GCP Workload Identity Federation Setup"
-      gcp_region: us-central1
-      gcp_project_id: my-gcp-project
-      gcp_repo: docker-images
-      gcp_workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/github-provider
-      gcp_service_account: github-actions@my-gcp-project.iam.gserviceaccount.com
+  # ===========================================================================
+  # GCP: gcr
+  # USE CASE: Publish to GCP Artifact Registry using OIDC (Keyless)
+  # ===========================================================================
+  gcr:
+    permissions:
+      id-token: write
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: ${{ vars.IMAGE_NAME }}
+      gcp_region: ${{ vars.GCP_REGION }}
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gcp_repo: ${{ vars.GCP_REPO }}
+      gcp_workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      gcp_service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      # Azure Container Registry (OIDC - Keyless Auth)
-      # Required: All 5 inputs below
-      # Setup: See docs/docker-ops.md "Azure OIDC Setup"
-      # Note: IDs below are fake examples - replace with your actual Azure values
-      acr_registry: myregistry.azurecr.io
-      acr_repository: my-app
-      azure_client_id: 12345678-90ab-cdef-1234-567890abcdef
-      azure_tenant_id: 87654321-fedc-ba09-8765-4321fedcba09
-      azure_subscription_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  # ===========================================================================
+  # Azure: acr
+  # USE CASE: Publish to Azure Container Registry using OIDC (Keyless)
+  # ===========================================================================
+  acr:
+    permissions:
+      id-token: write
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: ${{ vars.IMAGE_NAME }}
+      acr_registry: ${{ vars.ACR_REGISTRY }}
+      acr_repository: ${{ vars.ACR_REPOSITORY }}
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      # Optional: Custom build settings
-      dockerfile_path: ./Dockerfile
-      build_platforms: linux/amd64,linux/arm64
-      # Build args support placeholders: {{version}} = release version, {{branch}} = branch name
-      build_args: APP_VERSION={{version}},BUILD_DATE={{branch}},ENV=production
-
+  # ===========================================================================
+  # All: all
+  # USE CASE: Publish to Docker Hub, GCP, and Azure simultaneously
+  # ===========================================================================
+  all:
+    permissions:
+      id-token: write
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: ${{ vars.IMAGE_NAME }}
+      # Docker Hub
+      docker_login: ${{ vars.DOCKER_USERNAME }}
+      docker_org: ${{ vars.DOCKER_ORG }}
+      docker_repo: ${{ vars.DOCKER_REPO }}
+      # GCP
+      gcp_region: ${{ vars.GCP_REGION }}
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gcp_repo: ${{ vars.GCP_REPO }}
+      gcp_workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      gcp_service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      # Azure
+      acr_registry: ${{ vars.ACR_REGISTRY }}
+      acr_repository: ${{ vars.ACR_REPOSITORY }}
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
