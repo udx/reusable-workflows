@@ -1,9 +1,11 @@
-name: Release CLI
+name: CLI Ops
 on:
-  workflow_call:
-    secrets:
-      npm_token:
-        required: true
+  push:
+    paths:
+      - 'cli/**'
+      - 'scripts/**'
+      - '.github/workflows/_release-cli.yml'
+  workflow_dispatch:
 
 jobs:
   release:

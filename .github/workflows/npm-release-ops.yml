@@ -98,15 +98,42 @@ jobs:
             echo "has_webhook=false" >> $GITHUB_OUTPUT
           fi
 
+  test:
+    needs: config
+    runs-on: ubuntu-latest
+    if: inputs.test_command != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ inputs.working_directory }}
+
+      - name: Run Tests
+        run: ${{ inputs.test_command }}
+        working-directory: ${{ inputs.working_directory }}
+
   release:
-    needs: [config]
-    if: needs.config.outputs.is_release_branch == 'true'
+    needs: [config, test]
+    # Only run release on the designated release branch
+    if: |
+      always() && 
+      needs.config.outputs.is_release_branch == 'true' && 
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write # Required for provenance
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -116,15 +143,6 @@ jobs:
           registry-url: ${{ inputs.registry_url }}
           cache: 'npm'
           cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: ${{ inputs.working_directory }}
-
-      - name: Run Tests
-        if: inputs.test_command != ''
-        run: ${{ inputs.test_command }}
-        working-directory: ${{ inputs.working_directory }}
 
       - name: Publish to NPM
         env:

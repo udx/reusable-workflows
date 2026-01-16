@@ -23,7 +23,8 @@ export class TemplateLoader {
     }
 
     const workflowFiles = readdirSync(workflowsDir)
-      .filter(file => file.endsWith(this.config.components.workflow.ext));
+      .filter(file => file.endsWith(this.config.components.workflow.ext))
+      .filter(file => !file.startsWith('_'));
 
     const templates = [];
 
