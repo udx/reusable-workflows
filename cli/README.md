@@ -39,3 +39,30 @@ The CLI parses a three-layer structure to provide a dynamic UI:
 1. **Workflow (.yml)**: Defines inputs with registry-prefixed metadata.
 2. **Docs (.md)**: Provides the generator flow and setup instructions.
 3. **Example (.yml)**: Acts as the base template for the generated manifest.
+
+## Development
+
+### Local Testing
+To test the CLI during development:
+```bash
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Run UX test suite
+../scripts/test-cli-ux.sh
+
+# Run locally in a target repo
+node index.js
+```
+
+## Releasing
+Publishing is automated via GitHub Actions:
+- **Trigger**: Merge to `master`.
+- **Workflow**: Uses [`npm-release-ops`](file:///Users/jonyfq/git/udx/reusable-workflows/.github/workflows/npm-release-ops.yml) with `working_directory: cli`.
+- **Manual**: To publish from local (if authorized):
+  ```bash
+  ../scripts/npm-publish.sh # Run from /cli folder
+  ```

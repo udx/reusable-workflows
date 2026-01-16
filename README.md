@@ -43,6 +43,24 @@ Each template is structured as follows:
 - **Documentation** (`docs/`) - Setup guides, configuration options, troubleshooting
 - **Examples** (`examples/`) - Real-world usage patterns with variable/secret patterns
 
+## Development
+
+### Adding a Template
+To add a new reusable workflow:
+1. Create your workflow in `.github/workflows/`.
+2. Prefix internal repository workflows with `_` to hide them from the CLI generator.
+3. Add a setup guide in `docs/` and an usage example in `examples/`.
+4. Ensure your workflow inputs follow the standard registry-prefix naming convention in descriptions (e.g., `Docker Hub: Image Name`).
+
+### Internal Infrastructure
+Infrastructure workflows (CLI release, tests, etc.) are marked with a `_` prefix and are excluded from the public CLI generator. The primary entry point is [`_release-cli.yml`](file:///Users/jonyfq/git/udx/reusable-workflows/.github/workflows/_release-cli.yml).
+
+## Releasing
+
+1. **Versioning**: The repository uses Semantic Versioning.
+2. **Automated Release**: Pushing to `master` triggers the [`_release-cli.yml`](file:///Users/jonyfq/git/udx/reusable-workflows/.github/workflows/_release-cli.yml) workflow.
+3. **Artifacts**: This automatically bumps the CLI version, creates a GitHub Release, and tags the repository.
+
 ## License
 
 MIT License - see [LICENSE](https://github.com/udx/reusable-workflows/blob/master/LICENSE)
