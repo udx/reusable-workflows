@@ -1,5 +1,10 @@
 # Changelog
 
+### 1.1.6
+- **Fix**: Smart Prompt Skipping (skips inputs with defaults to reduce friction).
+- **Fix**: Preset Group Pre-selection (automatically selects and preserves preset-related component groups).
+- **Fix**: Improved Interactive Registry Selection (allows adding registries to a preset base).
+
 ### 1.1.5
 - **Feat**: Asset-Driven UX Testing suite (verifies CLI against repository templates/examples).
 - **Fix**: Normalized preset matching (matches `multi-registry` to `Multi Registry`).

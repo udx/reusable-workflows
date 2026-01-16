@@ -143,12 +143,18 @@ class WorkflowGenerator {
 
     // Common inputs
     this.ui.printSectionHeader(icons.config, 'Configuration');
-    const commonAnswers = await this.promptInputs(groupedInputs.common, mergedDefaults, isNonInteractive);
-
+    // If we have a preset, we use a "smart skip" strategy: only ask for required fields that have NO default or detected/preset value
+    const commonAnswers = await this.promptInputs(groupedInputs.common, mergedDefaults, isNonInteractive, !!cliPresetName || (template.presets && template.presets.length > 0));
     // Optional component groups
     const prefixGroups = Object.keys(groupedInputs).filter(key => key !== 'common');
     let groupAnswers = {};
-    let selectedGroups = [];
+    
+    // Identify pre-selected groups (from preset or detection)
+    const initialGroups = prefixGroups.filter(key => 
+      groupedInputs[key].some(input => mergedDefaults[input.name] !== undefined)
+    );
+
+    let selectedGroups = initialGroups;
     
     if (prefixGroups.length > 0) {
       if (!isNonInteractive) {
@@ -162,7 +168,7 @@ class WorkflowGenerator {
             choices: prefixGroups.map(key => ({
               name: groupedInputs[key][0].prefix,
               value: key,
-              checked: selectedGroups.includes(key) || groupedInputs[key].some(input => mergedDefaults[input.name] !== undefined)
+              checked: selectedGroups.includes(key)
             }))
           }
         ]);
@@ -190,7 +196,7 @@ class WorkflowGenerator {
         if (!isNonInteractive) {
           this.ui.printSectionHeader(icons.group, `${groupName} Configuration`);
         }
-        const answers = await this.promptInputs(groupInputs, mergedDefaults, isNonInteractive);
+        const answers = await this.promptInputs(groupInputs, mergedDefaults, isNonInteractive, true);
         groupAnswers = { ...groupAnswers, ...answers };
       }
     }
@@ -261,7 +267,7 @@ class WorkflowGenerator {
     return { templateId, answers: allAnswers, files: result };
   }
 
-  async promptInputs(inputs, detectedValues = {}, isNonInteractive = false) {
+  async promptInputs(inputs, detectedValues = {}, isNonInteractive = false, skipDefaults = false) {
     if (!inputs || inputs.length === 0) {
       return {};
     }
@@ -278,7 +284,15 @@ class WorkflowGenerator {
     }
     
     const questions = inputs
-      .filter(input => detectedValues[input.name] === undefined)
+      .filter(input => {
+        // Skip if already detected/preset
+        if (detectedValues[input.name] !== undefined) return false;
+        
+        // Skip if it has a default and we are in "smart skip" mode
+        if (skipDefaults && input.default !== undefined) return false;
+        
+        return true;
+      })
       .map(input => {
         const message = input.name === 'image_name' 
           ? 'Enter Docker image name (e.g. my-app) - used for all registry tags:' 
