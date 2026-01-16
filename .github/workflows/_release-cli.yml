@@ -15,5 +15,6 @@ jobs:
       build_command: "" # CLI doesn't need build
       test_command: "npm test"
       working_directory: "cli"
+      environment: "Master"
     secrets:
       npm_token: ${{ secrets.npm_token }}

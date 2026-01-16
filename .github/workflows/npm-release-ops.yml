@@ -48,10 +48,14 @@ on:
         required: false
         type: string
         default: "."
+      environment:
+        description: "GitHub: Environment to use for the release job (Optional)"
+        required: false
+        type: string
     secrets:
       npm_token:
-        description: "NPM: Token for publishing to the registry"
-        required: true
+        description: "NPM: Token for publishing (Optional if OIDC/Keyless is configured)"
+        required: false
       slack_webhook_url:
         description: "Slack: Webhook URL for notifications (Optional)"
         required: false
@@ -129,6 +133,7 @@ jobs:
       needs.config.outputs.is_release_branch == 'true' && 
       (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     permissions:
       contents: write
       id-token: write # Required for provenance
