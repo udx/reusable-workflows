@@ -1,0 +1,25 @@
+jobs:
+  build:
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: test
+      release_branch: latest
+      docker_login: ${{ vars.DOCKER_USERNAME }}
+      docker_org: myorg
+      docker_repo: my-app
+      gcp_region: us-central1
+      gcp_project_id: my-gcp-project
+      gcp_repo: docker-images
+      gcp_workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/github-provider
+      gcp_service_account: github-actions@my-gcp-project.iam.gserviceaccount.com
+      acr_registry: myregistry.azurecr.io
+      acr_repository: my-app
+      azure_client_id: 12345678-90ab-cdef-1234-567890abcdef
+      azure_tenant_id: 87654321-fedc-ba09-8765-4321fedcba09
+      azure_subscription_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      dockerfile_path: ./Dockerfile
+      build_platforms: linux/amd64,linux/arm64
+      build_args: ""
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

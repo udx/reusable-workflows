@@ -1,0 +1,6 @@
+jobs:
+  release:
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: detected-image
+      build_platforms: linux/amd64

@@ -1,0 +1,14 @@
+name: NPM Release
+"on":
+  push:
+    branches:
+      - latest
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@v2.0.0
+    with:
+      node_version: "20"
+      working_directory: .

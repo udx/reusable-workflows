@@ -1,0 +1,6 @@
+{
+  "name": "NPM Release Fresh",
+  "template": "npm-release-ops",
+  "args": ["--non-interactive"],
+  "verifyRequired": true
+}

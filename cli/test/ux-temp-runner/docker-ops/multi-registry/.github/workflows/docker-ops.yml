@@ -1,0 +1,38 @@
+name: Docker Release
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch: null
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: ${{ vars.IMAGE_NAME }}
+      docker_login: ${{ vars.DOCKER_USERNAME }}
+      docker_org: ${{ vars.DOCKER_ORG }}
+      docker_repo: ${{ vars.DOCKER_REPO }}
+      gcp_region: ${{ vars.GCP_REGION }}
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gcp_repo: ${{ vars.GCP_REPO }}
+      gcp_workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      gcp_service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      acr_registry: ${{ vars.ACR_REGISTRY }}
+      acr_repository: ${{ vars.ACR_REPOSITORY }}
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      release_branch: latest
+      dockerfile_path: ./Dockerfile
+      build_platforms: linux/amd64,linux/arm64
+      version_config_path: ci/git-version.yml
+      build_args: ""
+      enable_security_scan: "true"
+      enable_security_upload: "true"
+      enable_sbom: "true"
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

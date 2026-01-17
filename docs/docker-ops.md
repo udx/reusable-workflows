@@ -1,4 +1,7 @@
 # Docker Operations Workflow
+<!-- short: Docker image release pipeline with multi-registry support -->
+
+Build, scan, and publish Docker images to multiple registries with security scanning and SBOM generation.
 
 Reusable workflow for building, scanning, and publishing Docker images to multiple registries.
 
@@ -9,6 +12,47 @@ Reusable workflow for building, scanning, and publishing Docker images to multip
 - Publish to Docker Hub, GCP Artifact Registry, and/or Azure Container Registry
 - Slack notifications
 - Automatic versioning (package.json or GitVersion)
+
+## CLI Generator
+
+Generate workflow configuration interactively:
+
+```bash
+npm install -g @udx/reusable-workflows
+reusable-workflows
+```
+
+### Flow
+
+1. **Select template** → docker-ops
+2. **Common inputs** → Image name, release branch, dockerfile path, build platforms
+3. **Select registries** → Docker Hub, GCP, ACR (multi-select)
+4. **Registry configuration** → Prompted for selected registries only
+5. **Output** → `.github/workflows/docker-ops.yml` + `SETUP-docker-ops.md`
+
+### Registry Prompts
+
+**Docker Hub:**
+- Username → `${{ vars.DOCKER_USERNAME }}`
+- Organization
+- Repository
+- Secret: `DOCKER_TOKEN`
+
+**GCP Artifact Registry:**
+- Region
+- Project ID
+- Repository name
+- Workload Identity Provider
+- Service account email
+- Permissions: `id-token: write`
+
+**Azure Container Registry:**
+- Registry (e.g., myregistry.azurecr.io)
+- Repository
+- Client ID
+- Tenant ID
+- Subscription ID
+- Permissions: `id-token: write`
 
 ## Quick Start
 
@@ -390,54 +434,6 @@ with:
 
 - Only works on release branches
 - Requires `security-events: write` permission (auto-granted)
-
-## AI Implementation Prompt
-
-Use this template with AI coding assistants to generate a complete workflow configuration:
-
-```
-Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-template to create a Docker release workflow for my containerized application.
-
-Requirements:
-1. Check the Dependency & Permission Matrix in docs/docker-ops.md
-2. Include all mandatory inputs for [Docker Hub/GCP/ACR] based on my target registry
-3. Use build_args with {{version}} placeholder for version injection
-4. Ensure proper OIDC permissions for cloud registries (id-token: write)
-5. Configure for release branch: [main/master/latest]
-
-Project context:
-- Docker image name: [your-image-name]
-- Target registries: [Docker Hub/GCP Artifact Registry/Azure Container Registry]
-- Dockerfile location: [./Dockerfile or custom path]
-- Build arguments: [any ARG values needed in Dockerfile]
-- Multi-platform builds: [linux/amd64, linux/arm64, or custom]
-
-Verify that all mandatory inputs from the matrix are included and properly configured.
-```
-
-**Example usage:**
-
-```
-Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-template to create a Docker release workflow for my containerized application.
-
-Requirements:
-1. Check the Dependency & Permission Matrix in docs/docker-ops.md
-2. Include all mandatory inputs for GCP based on my target registry
-3. Use build_args with {{version}} placeholder for version injection
-4. Ensure proper OIDC permissions for cloud registries (id-token: write)
-5. Configure for release branch: main
-
-Project context:
-- Docker image name: my-api-service
-- Target registries: GCP Artifact Registry
-- Dockerfile location: ./Dockerfile
-- Build arguments: APP_VERSION={{version}}, BUILD_DATE={{branch}}
-- Multi-platform builds: linux/amd64,linux/arm64
-
-Verify that all mandatory inputs from the matrix are included and properly configured.
-```
 
 ## Best Practices
 

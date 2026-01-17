@@ -1,0 +1,41 @@
+{
+  "name": "@udx/reusable-workflows",
+  "version": "1.1.6",
+  "description": "CLI tool to generate GitHub Actions workflows from reusable templates",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "config.js",
+    "lib/",
+    "README.md",
+    "changes.md",
+    ".github/",
+    "docs/",
+    "examples/"
+  ],
+  "bin": {
+    "reusable-workflows": "./index.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "github-actions",
+    "workflow",
+    "ci-cd",
+    "docker",
+    "automation"
+  ],
+  "author": "UDX",
+  "license": "MIT",
+  "dependencies": {
+    "inquirer": "^9.2.12",
+    "js-yaml": "^4.1.0",
+    "marked": "^11.1.1",
+    "chalk": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
