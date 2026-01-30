@@ -171,10 +171,12 @@ jobs:
         if: inputs.enable_gh_release == true
         id: changelog
         uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
         with:
           script: |
             const fs = require('fs');
-            const version = '${{ needs.config.outputs.release_version }}';
+            const version = process.env.RELEASE_VERSION;
             let description = 'Release ' + version;
             
             if (fs.existsSync('./changes.md')) {
