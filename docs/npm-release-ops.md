@@ -3,22 +3,6 @@
 
 A reusable workflow to publish npm packages to a registry with security best practices, optional build/test steps, and GitHub release generation.
 
-## CLI Generator
-
-### Flow
-
-1. **Select template** → npm-release
-2. **Setup Node** → Node version, registry URL
-3. **Execution options** → Build command, test command, provenance
-4. **Secrets configuration** → `NPM_TOKEN`
-
-### Registry Prompts
-
-**NPM:**
-- Registry URL → `https://registry.npmjs.org/`
-- Provenance → `true`
-- Secret: `NPM_TOKEN`
-
 ## Setup Guide
 
 ### 1. Configure NPM Token

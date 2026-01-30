@@ -13,47 +13,6 @@ Reusable workflow for building, scanning, and publishing Docker images to multip
 - Slack notifications
 - Automatic versioning (package.json or GitVersion)
 
-## CLI Generator
-
-Generate workflow configuration interactively:
-
-```bash
-npm install -g @udx/reusable-workflows
-reusable-workflows
-```
-
-### Flow
-
-1. **Select template** → docker-ops
-2. **Common inputs** → Image name, release branch, dockerfile path, build platforms
-3. **Select registries** → Docker Hub, GCP, ACR (multi-select)
-4. **Registry configuration** → Prompted for selected registries only
-5. **Output** → `.github/workflows/docker-ops.yml` + `SETUP-docker-ops.md`
-
-### Registry Prompts
-
-**Docker Hub:**
-- Username → `${{ vars.DOCKER_USERNAME }}`
-- Organization
-- Repository
-- Secret: `DOCKER_TOKEN`
-
-**GCP Artifact Registry:**
-- Region
-- Project ID
-- Repository name
-- Workload Identity Provider
-- Service account email
-- Permissions: `id-token: write`
-
-**Azure Container Registry:**
-- Registry (e.g., myregistry.azurecr.io)
-- Repository
-- Client ID
-- Tenant ID
-- Subscription ID
-- Permissions: `id-token: write`
-
 ## Quick Start
 
 ```yaml
