@@ -1,0 +1,223 @@
+name: NPM Release
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: "Node.js: Version to use (default: 20)"
+        required: false
+        default: "20"
+        type: string
+      build_command:
+        description: "Build: Command to run before publishing (default: npm run build, set to empty to skip)"
+        required: false
+        default: "npm run build"
+        type: string
+      test_command:
+        description: "Test: Command to run before building (default: npm test, set to empty to skip)"
+        required: false
+        default: "npm test"
+        type: string
+      registry_url:
+        description: "NPM: Registry URL (default: https://registry.npmjs.org/)"
+        required: false
+        default: "https://registry.npmjs.org/"
+        type: string
+      provenance:
+        description: "NPM: Enable provenance for the release (default: true)"
+        required: false
+        default: true
+        type: boolean
+      release_branch:
+        description: "Branch: Deployment branch that triggers releases (default: latest)"
+        required: false
+        default: "latest"
+        type: string
+      enable_gh_release:
+        description: "GitHub: Whether to create a GitHub release (default: true)"
+        required: false
+        default: true
+        type: boolean
+      check_version_bump:
+        description: "NPM: Whether to check if the version is already published (default: true)"
+        required: false
+        default: true
+        type: boolean
+      working_directory:
+        description: "Common: Directory containing package.json"
+        required: false
+        type: string
+        default: "."
+      environment:
+        description: "GitHub: Environment to use for the release job (Optional)"
+        required: false
+        type: string
+    secrets:
+      npm_token:
+        description: "NPM: Token for publishing (Optional if OIDC/Keyless is configured)"
+        required: false
+      slack_webhook_url:
+        description: "Slack: Webhook URL for notifications (Optional)"
+        required: false
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      current_branch: ${{ steps.branches.outputs.branch_name }}
+      is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
+      release_version: ${{ steps.package_version.outputs.version }}
+      package_name: ${{ steps.package_version.outputs.name }}
+      has_slack_webhook: ${{ steps.check_slack.outputs.has_webhook }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Package Info
+        id: package_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "📦 Package: $NAME@$VERSION"
+        working-directory: ${{ inputs.working_directory }}
+
+      - name: Determine Branch Information
+        id: branches
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          
+          IS_RELEASE_BRANCH=$([[ "${BRANCH_NAME}" == "${{ inputs.release_branch }}" ]] && echo "true" || echo "false")
+          echo "is_release_branch=${IS_RELEASE_BRANCH}" >> $GITHUB_OUTPUT
+          echo "📌 Branch: ${BRANCH_NAME} (Release: ${IS_RELEASE_BRANCH})"
+
+      - name: Check Slack Webhook
+        id: check_slack
+        run: |
+          if [ -n "${{ secrets.slack_webhook_url }}" ]; then
+            echo "has_webhook=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_webhook=false" >> $GITHUB_OUTPUT
+          fi
+
+  test:
+    needs: config
+    runs-on: ubuntu-latest
+    if: inputs.test_command != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ inputs.working_directory }}
+
+      - name: Run Tests
+        run: ${{ inputs.test_command }}
+        working-directory: ${{ inputs.working_directory }}
+
+  release:
+    needs: [config, test]
+    # Only run release on the designated release branch
+    if: |
+      always() && 
+      needs.config.outputs.is_release_branch == 'true' && 
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      id-token: write # Required for provenance
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.registry_url }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - name: Publish to NPM
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
+          REGISTRY_URL: ${{ inputs.registry_url }}
+          PROVENANCE: ${{ inputs.provenance }}
+          BUILD_COMMAND: ${{ inputs.build_command }}
+          CHECK_VERSION_BUMP: ${{ inputs.check_version_bump }}
+          NPM_TAG: ${{ inputs.release_branch }}
+          WORKING_DIR: ${{ inputs.working_directory }}
+        run: ./scripts/npm-publish.sh
+
+      - name: Parse Changelog
+        if: inputs.enable_gh_release == true
+        id: changelog
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const version = '${{ needs.config.outputs.release_version }}';
+            let description = 'Release ' + version;
+            
+            if (fs.existsSync('./changes.md')) {
+              const content = fs.readFileSync('./changes.md', 'utf8');
+              const lines = content.split('\n');
+              const startMarker = `### ${version}`;
+              let found = false;
+              let body = [];
+              
+              for (const line of lines) {
+                if (line.startsWith(startMarker)) {
+                  found = true;
+                  continue;
+                }
+                if (found) {
+                  if (line.startsWith('### ')) break;
+                  body.push(line);
+                }
+              }
+              if (body.length > 0) {
+                description = body.join('\n').trim();
+              }
+            }
+            core.setOutput('description', description);
+
+      - name: Create GitHub Release
+        if: inputs.enable_gh_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ needs.config.outputs.release_version }}"
+          tag_name: "v${{ needs.config.outputs.release_version }}"
+          body: ${{ steps.changelog.outputs.description }}
+          token: ${{ github.token }}
+
+      - name: Notify Slack
+        if: always() && needs.config.outputs.has_slack_webhook == 'true'
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "NPM Release for ${{ needs.config.outputs.package_name }}: ${{ job.status == 'success' && '✅ SUCCESS' || '❌ FAILED' }}",
+              "attachments": [
+                {
+                  "color": "${{ job.status == 'success' && '#36a64f' || '#ec000c' }}",
+                  "fields": [
+                    { "title": "Version", "value": "${{ needs.config.outputs.release_version }}", "short": true },
+                    { "title": "Commit", "value": "${{ github.sha }}", "short": true }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEB_HOOK_URL: ${{ secrets.slack_webhook_url }}
