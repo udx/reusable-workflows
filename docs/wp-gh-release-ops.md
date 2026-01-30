@@ -1,4 +1,5 @@
 # Publish WP Plugin Release on GitHub Workflow
+<!-- short: WordPress plugin release automation -->
 
 Reusable workflow for generating and publishing WordPress plugin release on GitHub.
 

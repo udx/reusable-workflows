@@ -1,4 +1,7 @@
 # Docker Operations Workflow
+<!-- short: Docker image release pipeline with multi-registry support -->
+
+Build, scan, and publish Docker images to multiple registries with security scanning and SBOM generation.
 
 Reusable workflow for building, scanning, and publishing Docker images to multiple registries.
 
@@ -390,54 +393,6 @@ with:
 
 - Only works on release branches
 - Requires `security-events: write` permission (auto-granted)
-
-## AI Implementation Prompt
-
-Use this template with AI coding assistants to generate a complete workflow configuration:
-
-```
-Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-template to create a Docker release workflow for my containerized application.
-
-Requirements:
-1. Check the Dependency & Permission Matrix in docs/docker-ops.md
-2. Include all mandatory inputs for [Docker Hub/GCP/ACR] based on my target registry
-3. Use build_args with {{version}} placeholder for version injection
-4. Ensure proper OIDC permissions for cloud registries (id-token: write)
-5. Configure for release branch: [main/master/latest]
-
-Project context:
-- Docker image name: [your-image-name]
-- Target registries: [Docker Hub/GCP Artifact Registry/Azure Container Registry]
-- Dockerfile location: [./Dockerfile or custom path]
-- Build arguments: [any ARG values needed in Dockerfile]
-- Multi-platform builds: [linux/amd64, linux/arm64, or custom]
-
-Verify that all mandatory inputs from the matrix are included and properly configured.
-```
-
-**Example usage:**
-
-```
-Act as a DevSecOps Engineer. Use the udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-template to create a Docker release workflow for my containerized application.
-
-Requirements:
-1. Check the Dependency & Permission Matrix in docs/docker-ops.md
-2. Include all mandatory inputs for GCP based on my target registry
-3. Use build_args with {{version}} placeholder for version injection
-4. Ensure proper OIDC permissions for cloud registries (id-token: write)
-5. Configure for release branch: main
-
-Project context:
-- Docker image name: my-api-service
-- Target registries: GCP Artifact Registry
-- Dockerfile location: ./Dockerfile
-- Build arguments: APP_VERSION={{version}}, BUILD_DATE={{branch}}
-- Multi-platform builds: linux/amd64,linux/arm64
-
-Verify that all mandatory inputs from the matrix are included and properly configured.
-```
 
 ## Best Practices
 

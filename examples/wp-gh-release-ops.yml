@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  plugin-release:
     uses: udx/reusable-workflows/.github/workflows/wp-gh-release-ops.yml@master
     with:
       tag: ${{ github.event.inputs.tag }}
