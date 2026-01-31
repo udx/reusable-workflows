@@ -48,6 +48,12 @@ jobs:
       package_name: ${{ steps.package_version.outputs.name }}
       has_slack_webhook: ${{ steps.check_slack.outputs.has_webhook }}
       changelog_description: ${{ steps.changelog.outputs.description }}
+    env:
+      NODE_VERSION: ${{ inputs.node_version }}
+      PROVENANCE: ${{ inputs.provenance }}
+      RELEASE_BRANCH: ${{ inputs.release_branch }}
+      ENABLE_GH_RELEASE: ${{ inputs.enable_gh_release }}
+      WORKING_DIRECTORY: ${{ inputs.working_directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -55,11 +61,11 @@ jobs:
       - name: Store inputs as outputs
         id: store_inputs
         run: |
-          echo "node_version=${{ inputs.node_version }}" >> $GITHUB_OUTPUT
-          echo "provenance=${{ inputs.provenance }}" >> $GITHUB_OUTPUT
-          echo "release_branch=${{ inputs.release_branch }}" >> $GITHUB_OUTPUT
-          echo "enable_gh_release=${{ inputs.enable_gh_release }}" >> $GITHUB_OUTPUT
-          echo "working_directory=${{ inputs.working_directory }}" >> $GITHUB_OUTPUT
+          echo "node_version=${{ env.NODE_VERSION }}" >> $GITHUB_OUTPUT
+          echo "provenance=${{ env.PROVENANCE }}" >> $GITHUB_OUTPUT
+          echo "release_branch=${{ env.RELEASE_BRANCH }}" >> $GITHUB_OUTPUT
+          echo "enable_gh_release=${{ env.ENABLE_GH_RELEASE }}" >> $GITHUB_OUTPUT
+          echo "working_directory=${{ env.WORKING_DIRECTORY }}" >> $GITHUB_OUTPUT
 
       - name: Get Package Info
         id: package_version
@@ -69,12 +75,12 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "📦 Package: $NAME@$VERSION"
-        working-directory: ${{ steps.store_inputs.outputs.working_directory }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Determine Branch Information
         id: branches
         env:
-          RELEASE_BRANCH: ${{ steps.store_inputs.outputs.release_branch }}
+          RELEASE_BRANCH: ${{ env.RELEASE_BRANCH }}
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
@@ -132,11 +138,11 @@ jobs:
         run: |
           echo "NPM Release Config"
           echo "-------------------"
-          echo "Node: ${{ steps.store_inputs.outputs.node_version }}"
-          echo "Provenance: ${{ steps.store_inputs.outputs.provenance == 'true' && 'enabled' || 'disabled' }}"
-          echo "Release branch: ${{ steps.store_inputs.outputs.release_branch }}"
-          echo "GitHub release: ${{ steps.store_inputs.outputs.enable_gh_release == 'true' && 'enabled' || 'disabled' }}"
-          echo "Working dir: ${{ steps.store_inputs.outputs.working_directory }}"
+          echo "Node: ${{ env.NODE_VERSION }}"
+          echo "Provenance: ${{ env.PROVENANCE == 'true' && 'enabled' || 'disabled' }}"
+          echo "Release branch: ${{ env.RELEASE_BRANCH }}"
+          echo "GitHub release: ${{ env.ENABLE_GH_RELEASE == 'true' && 'enabled' || 'disabled' }}"
+          echo "Working dir: ${{ env.WORKING_DIRECTORY }}"
 
   gate:
     runs-on: ubuntu-latest
