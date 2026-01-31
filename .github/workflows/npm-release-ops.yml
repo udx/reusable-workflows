@@ -50,7 +50,7 @@ jobs:
       changelog_description: ${{ steps.changelog.outputs.description }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Store inputs as outputs
         id: store_inputs
@@ -96,7 +96,7 @@ jobs:
 
       - name: Parse Changelog
         id: changelog
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           RELEASE_VERSION: ${{ steps.package_version.outputs.version }}
         with:
@@ -168,10 +168,10 @@ jobs:
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -227,10 +227,10 @@ jobs:
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -279,7 +279,7 @@ jobs:
       CHANGELOG_DESCRIPTION: ${{ needs.config.outputs.changelog_description }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -331,8 +331,10 @@ jobs:
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
     steps:
       - name: Notify Slack
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v2
         with:
+          webhook: ${{ secrets.slack_webhook_url }}
+          webhook-type: incoming-webhook
           payload: |
             {
               "text": "NPM Release for ${{ env.PACKAGE_NAME }}: ${{ needs.npm-release.result == 'success' && '✅ SUCCESS' || needs.npm-release.result == 'cancelled' && '⚪ CANCELLED' || '❌ FAILED' }}",
