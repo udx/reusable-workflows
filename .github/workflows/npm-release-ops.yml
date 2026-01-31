@@ -29,9 +29,6 @@ on:
         type: string
         default: "."
     secrets:
-      npm_token:
-        description: "NPM: Token for publishing (Optional if OIDC/Keyless is configured)"
-        required: false
       slack_webhook_url:
         description: "Slack: Webhook URL for notifications (Optional)"
         required: false
@@ -207,7 +204,6 @@ jobs:
       - name: Publish to NPM
         if: needs.config.outputs.is_release_branch == 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
           PROVENANCE: ${{ inputs.provenance }}
           NPM_TAG: ${{ inputs.release_branch }}
         run: |
