@@ -37,6 +37,11 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
+      node_version: ${{ steps.store_inputs.outputs.node_version }}
+      provenance: ${{ steps.store_inputs.outputs.provenance }}
+      release_branch: ${{ steps.store_inputs.outputs.release_branch }}
+      enable_gh_release: ${{ steps.store_inputs.outputs.enable_gh_release }}
+      working_directory: ${{ steps.store_inputs.outputs.working_directory }}
       current_branch: ${{ steps.branches.outputs.branch_name }}
       is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
       release_version: ${{ steps.package_version.outputs.version }}
@@ -47,6 +52,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Store inputs as outputs
+        id: store_inputs
+        run: |
+          echo "node_version=${{ inputs.node_version }}" >> $GITHUB_OUTPUT
+          echo "provenance=${{ inputs.provenance }}" >> $GITHUB_OUTPUT
+          echo "release_branch=${{ inputs.release_branch }}" >> $GITHUB_OUTPUT
+          echo "enable_gh_release=${{ inputs.enable_gh_release }}" >> $GITHUB_OUTPUT
+          echo "working_directory=${{ inputs.working_directory }}" >> $GITHUB_OUTPUT
+
       - name: Get Package Info
         id: package_version
         run: |
@@ -55,16 +69,16 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "📦 Package: $NAME@$VERSION"
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ${{ steps.store_inputs.outputs.working_directory }}
 
       - name: Determine Branch Information
         id: branches
         env:
-          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          RELEASE_BRANCH: ${{ steps.store_inputs.outputs.release_branch }}
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
-          
+
           IS_RELEASE_BRANCH=$([[ "${BRANCH_NAME}" == "${RELEASE_BRANCH}" ]] && echo "true" || echo "false")
           echo "is_release_branch=${IS_RELEASE_BRANCH}" >> $GITHUB_OUTPUT
           echo "📌 Branch: ${BRANCH_NAME} (Release: ${IS_RELEASE_BRANCH})"
@@ -90,7 +104,7 @@ jobs:
             const fs = require('fs');
             const version = process.env.RELEASE_VERSION;
             let description = 'Release ' + version;
-            
+
             if (fs.existsSync('./changes.md')) {
               const content = fs.readFileSync('./changes.md', 'utf8');
               const lines = content.split('\n');
@@ -114,27 +128,44 @@ jobs:
             }
             core.setOutput('description', description);
 
+      - name: Config summary
+        run: |
+          echo "NPM Release Config"
+          echo "-------------------"
+          echo "Node: ${{ steps.store_inputs.outputs.node_version }}"
+          echo "Provenance: ${{ steps.store_inputs.outputs.provenance == 'true' && 'enabled' || 'disabled' }}"
+          echo "Release branch: ${{ steps.store_inputs.outputs.release_branch }}"
+          echo "GitHub release: ${{ steps.store_inputs.outputs.enable_gh_release == 'true' && 'enabled' || 'disabled' }}"
+          echo "Working dir: ${{ steps.store_inputs.outputs.working_directory }}"
+
   gate:
     runs-on: ubuntu-latest
     needs: config
+    env:
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
     outputs:
       release_allowed: ${{ steps.gate.outputs.release_allowed }}
     steps:
       - name: Gate check
         id: gate
         run: |
-          if [ "${{ needs.config.outputs.is_release_branch }}" == "true" ]; then
+          if [ "${{ IS_RELEASE_BRANCH }}" == "true" ]; then
             echo "release_allowed=true" >> $GITHUB_OUTPUT
-            echo "✅ Release branch detected: ${{ needs.config.outputs.current_branch }}"
+            echo "✅ Release branch detected: ${{ CURRENT_BRANCH }}"
           else
             echo "release_allowed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Non-release branch: ${{ needs.config.outputs.current_branch }}"
+            echo "ℹ️ Non-release branch: ${{ CURRENT_BRANCH }}"
           fi
 
   build-and-test:
     runs-on: ubuntu-latest
     needs: [config, gate]
     if: always() && needs.gate.result == 'success'
+    env:
+      NODE_VERSION: ${{ needs.config.outputs.node_version }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -142,9 +173,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.node_version }}
-          cache: 'npm'
-          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
 
       - name: Detect npm scripts
         id: scripts
@@ -152,20 +183,20 @@ jobs:
           set -e
           set -o pipefail
           node -e "const s=require('./package.json').scripts||{}; console.log('has_test='+(!!s.test)); console.log('has_build='+(!!s.build));"
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Install dependencies
         if: |
           steps.scripts.outputs.has_test == 'true' ||
           steps.scripts.outputs.has_build == 'true' ||
-          needs.config.outputs.is_release_branch == 'true'
+          env.IS_RELEASE_BRANCH == 'true'
         run: npm ci
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Run Tests
         if: steps.scripts.outputs.has_test == 'true'
         run: npm test
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Run Build
         if: steps.scripts.outputs.has_build == 'true'
@@ -174,7 +205,7 @@ jobs:
           set -o pipefail
           echo "🏗️ Running build: npm run build"
           npm run build
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
   npm-release:
     needs: [config, gate, build-and-test]
@@ -186,6 +217,14 @@ jobs:
     permissions:
       contents: write
       id-token: write # Required for provenance
+    env:
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      NODE_VERSION: ${{ needs.config.outputs.node_version }}
+      PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
+      PROVENANCE: ${{ needs.config.outputs.provenance }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -193,19 +232,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.node_version }}
-          cache: 'npm'
-          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Publish to NPM
-        if: needs.config.outputs.is_release_branch == 'true'
+        if: env.IS_RELEASE_BRANCH == 'true'
         env:
-          PROVENANCE: ${{ inputs.provenance }}
-          NPM_TAG: ${{ inputs.release_branch }}
+          PROVENANCE: ${{ env.PROVENANCE }}
+          NPM_TAG: ${{ env.RELEASE_BRANCH }}
         run: |
           set -e
           set -o pipefail
@@ -218,8 +257,8 @@ jobs:
             PUBLISH_ARGS+=("--tag" "$NPM_TAG")
           fi
           npm publish "${PUBLISH_ARGS[@]}"
-          echo "✅ Successfully published ${{ needs.config.outputs.package_name }}@${{ needs.config.outputs.release_version }}"
-        working-directory: ${{ inputs.working_directory }}
+          echo "✅ Successfully published ${{ env.PACKAGE_NAME }}@${{ env.RELEASE_VERSION }}"
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
   github-release:
     needs: [config, gate, build-and-test]
@@ -228,10 +267,16 @@ jobs:
       needs.gate.outputs.release_allowed == 'true' &&
       needs.build-and-test.result == 'success' &&
       needs.config.outputs.is_release_branch == 'true' &&
-      inputs.enable_gh_release == true
+      needs.config.outputs.enable_gh_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+      ENABLE_GH_RELEASE: ${{ needs.config.outputs.enable_gh_release }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      CHANGELOG_DESCRIPTION: ${{ needs.config.outputs.changelog_description }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -239,30 +284,35 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Release ${{ needs.config.outputs.release_version }}"
-          tag_name: "v${{ needs.config.outputs.release_version }}"
-          body: ${{ needs.config.outputs.changelog_description }}
+          name: "Release ${{ env.RELEASE_VERSION }}"
+          tag_name: "v${{ env.RELEASE_VERSION }}"
+          body: ${{ env.CHANGELOG_DESCRIPTION }}
           token: ${{ github.token }}
 
   report:
     runs-on: ubuntu-latest
     needs: [config, gate, npm-release, github-release]
     if: always()
+    env:
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+      RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      ENABLE_GH_RELEASE: ${{ needs.config.outputs.enable_gh_release }}
     steps:
       - name: Report summary
         run: |
           echo "NPM Release Summary"
           echo "-------------------"
-          echo "Branch: ${{ needs.config.outputs.current_branch }}"
-          echo "Release branch: ${{ inputs.release_branch }}"
-          echo "Is release branch: ${{ needs.config.outputs.is_release_branch }}"
+          echo "Branch: ${{ env.CURRENT_BRANCH }}"
+          echo "Release branch: ${{ env.RELEASE_BRANCH }}"
+          echo "Is release branch: ${{ env.IS_RELEASE_BRANCH }}"
           echo "NPM release result: ${{ needs.npm-release.result }}"
           echo "GitHub release result: ${{ needs.github-release.result }}"
           echo "Tests: npm test (if script exists)"
           echo "Build: npm run build (if script exists)"
-          if [ "${{ needs.config.outputs.is_release_branch }}" == "true" ]; then
+          if [ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]; then
             echo "Publish: enabled"
-            echo "GitHub Release: ${{ inputs.enable_gh_release == true && 'enabled' || 'disabled' }}"
+            echo "GitHub Release: ${{ env.ENABLE_GH_RELEASE == 'true' && 'enabled' || 'disabled' }}"
           else
             echo "Publish: disabled (non-release branch)"
             echo "GitHub Release: disabled (non-release branch)"
@@ -275,18 +325,22 @@ jobs:
       always() &&
       needs.config.outputs.has_slack_webhook == 'true' &&
       needs.config.outputs.is_release_branch == 'true'
+    env:
+      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+      PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
     steps:
       - name: Notify Slack
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
             {
-              "text": "NPM Release for ${{ needs.config.outputs.package_name }}: ${{ needs.npm-release.result == 'success' && '✅ SUCCESS' || needs.npm-release.result == 'cancelled' && '⚪ CANCELLED' || '❌ FAILED' }}",
+              "text": "NPM Release for ${{ env.PACKAGE_NAME }}: ${{ needs.npm-release.result == 'success' && '✅ SUCCESS' || needs.npm-release.result == 'cancelled' && '⚪ CANCELLED' || '❌ FAILED' }}",
               "attachments": [
                 {
                   "color": "${{ needs.npm-release.result == 'success' && '#36a64f' || '#ec000c' }}",
                   "fields": [
-                    { "title": "Version", "value": "${{ needs.config.outputs.release_version }}", "short": true },
+                    { "title": "Version", "value": "${{ env.RELEASE_VERSION }}", "short": true },
                     { "title": "Commit", "value": "${{ github.sha }}", "short": true }
                   ]
                 }
