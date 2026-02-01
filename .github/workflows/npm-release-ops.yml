@@ -59,14 +59,27 @@ jobs:
 
       - name: Store inputs as outputs
         id: store_inputs
+        env:
+          NODE_VERSION: ${{ inputs.node_version }}
+          PROVENANCE: ${{ inputs.provenance }}
+          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          ENABLE_GH_RELEASE: ${{ inputs.enable_gh_release }}
+          DIST_DIR: ${{ inputs.dist_dir }}
         run: |
 
-          NODE_VERSION=${{ inputs.node_version }}
-          PROVENANCE=${{ inputs.provenance }}
-          RELEASE_BRANCH=${{ inputs.release_branch }}
-          ENABLE_GH_RELEASE=${{ inputs.enable_gh_release }}
-          WORKING_DIRECTORY=${{ env.WORKING_DIRECTORY }}
-          DIST_DIR=${{ inputs.dist_dir }}
+          echo "Inputs Preview:"
+          echo "Node version: $NODE_VERSION"
+          echo "Provenance: $PROVENANCE"
+          echo "Release branch: $RELEASE_BRANCH"
+          echo "GitHub release: $ENABLE_GH_RELEASE"
+          echo "Dist directory: $DIST_DIR"
+
+          echo "Set output from inputs..."
+          echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
+          echo "provenance=$PROVENANCE" >> $GITHUB_OUTPUT
+          echo "release_branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
+          echo "enable_gh_release=$ENABLE_GH_RELEASE" >> $GITHUB_OUTPUT
+          echo "dist_dir=$DIST_DIR" >> $GITHUB_OUTPUT
 
           echo "Inputs Preview:"
           echo "Node version: $NODE_VERSION"
@@ -172,21 +185,38 @@ jobs:
             core.setOutput('description', description);
 
       - name: Config summary
+        env:
+          NODE_VERSION: ${{ steps.store_inputs.outputs.node_version }}
+          PROVENANCE: ${{ steps.store_inputs.outputs.provenance }}
+          RELEASE_BRANCH: ${{ steps.store_inputs.outputs.release_branch }}
+          ENABLE_GH_RELEASE: ${{ steps.store_inputs.outputs.enable_gh_release }}
+          WORKING_DIRECTORY: ${{ steps.store_inputs.outputs.working_directory }}
+          DIST_DIR: ${{ steps.store_inputs.outputs.dist_dir }}
+          HAS_BUILD: ${{ steps.store_inputs.outputs.has_build }}
+          HAS_TEST: ${{ steps.store_inputs.outputs.has_test }}
+          IS_RELEASE_BRANCH: ${{ steps.branches.outputs.is_release_branch }}
+          CURRENT_BRANCH: ${{ steps.branches.outputs.current_branch }}
+          RELEASE_VERSION: ${{ steps.package_version.outputs.release_version }}
+          PACKAGE_NAME: ${{ steps.package_version.outputs.package_name }}
+          HAS_WEBHOOK: ${{ steps.check_slack.outputs.has_webhook }}
+          DESCRIPTION: ${{ steps.changelog.outputs.description }}
         run: |
           echo "NPM Release Config"
           echo "-------------------"
-          echo "Node: ${{ steps.store_inputs.outputs.node_version }}"
-          echo "Provenance: ${{ steps.store_inputs.outputs.provenance }}"
-          echo "Release branch: ${{ steps.store_inputs.outputs.release_branch }}"
-          echo "GitHub release: ${{ steps.store_inputs.outputs.enable_gh_release }}"
-          echo "Working dir: ${{ steps.store_inputs.outputs.working_directory }}"
-          echo "Dist dir: ${{ steps.store_inputs.outputs.dist_dir }}"
-          echo "Release version: ${{ steps.package_version.outputs.release_version }}"
-          echo "Package name: ${{ steps.package_version.outputs.package_name }}"
-          echo "Has slack webhook: ${{ steps.check_slack.outputs.has_webhook }}"
-          echo "Changelog description: ${{ steps.changelog.outputs.description }}"
-          echo "Has test script: ${{ steps.npm_scripts.outputs.has_test }}"
-          echo "Has build script: ${{ steps.npm_scripts.outputs.has_build }}"
+          echo "Node: $NODE_VERSION"
+          echo "Provenance: $PROVENANCE"
+          echo "Release branch: $RELEASE_BRANCH"
+          echo "GitHub release: $ENABLE_GH_RELEASE"
+          echo "Working dir: $WORKING_DIRECTORY"
+          echo "Dist dir: $DIST_DIR"
+          echo "Release version: $RELEASE_VERSION"
+          echo "Package name: $PACKAGE_NAME"
+          echo "Has slack webhook: $HAS_WEBHOOK"
+          echo "Changelog description: $DESCRIPTION"
+          echo "Has test script: $HAS_TEST"
+          echo "Has build script: $HAS_BUILD"
+          echo "Is release branch: $IS_RELEASE_BRANCH"
+          echo "Current branch: $CURRENT_BRANCH"
 
   gate:
     runs-on: ubuntu-latest
@@ -282,8 +312,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git tag ${{ env.RELEASE_VERSION }}
-          git push origin ${{ env.RELEASE_VERSION }}
+          git tag "$RELEASE_VERSION"
+          git push origin "$RELEASE_VERSION"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
