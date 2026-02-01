@@ -228,69 +228,6 @@ jobs:
         run: npm test
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
-  npm-release:
-    needs: [config, gate, build-and-test]
-    if: |
-      always() &&
-      needs.gate.outputs.release_allowed == 'true' &&
-      needs.build-and-test.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-    env:
-      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
-      RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      NODE_VERSION: ${{ needs.config.outputs.node_version }}
-      PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
-      PROVENANCE: ${{ needs.config.outputs.provenance }}
-      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
-      DIST_DIR: ${{ needs.config.outputs.dist_dir }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: $NODE_VERSION
-          cache: "npm"
-          cache-dependency-path: $WORKING_DIRECTORY/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: $WORKING_DIRECTORY
-
-      - name: Build
-        if: steps.scripts.outputs.has_build == 'true'
-        run: |
-          set -e
-          set -o pipefail
-          echo "🏗️ Running build: npm run build"
-          npm run build
-        working-directory: $WORKING_DIRECTORY
-
-      - name: Publish to NPM
-        if: env.IS_RELEASE_BRANCH == 'true'
-        env:
-          PROVENANCE: $PROVENANCE
-          NPM_TAG: $RELEASE_BRANCH
-        run: |
-          set -e
-          set -o pipefail
-          echo "🚢 Publishing to NPM..."
-          PUBLISH_ARGS=()
-          if [ "$PROVENANCE" == "true" ]; then
-            PUBLISH_ARGS+=("--provenance")
-          fi
-          if [ -n "$NPM_TAG" ]; then
-            PUBLISH_ARGS+=("--tag" "$NPM_TAG")
-          fi
-          npm publish "${PUBLISH_ARGS[@]}"
-          echo "✅ Successfully published $PACKAGE_NAME@$RELEASE_VERSION"
-        working-directory: $DIST_DIR
-
   github-release:
     needs: [config, gate, build-and-test]
     if: |
@@ -319,6 +256,70 @@ jobs:
           tag_name: "v$RELEASE_VERSION"
           body: $CHANGELOG_DESCRIPTION
           token: ${{ github.token }}
+
+  npm-release:
+    needs: [config, gate, build-and-test, github-release]
+    if: |
+      always() &&
+      needs.gate.outputs.release_allowed == 'true' &&
+      needs.build-and-test.result == 'success' &&
+      needs.github-release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+      RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      NODE_VERSION: ${{ needs.config.outputs.node_version }}
+      PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
+      PROVENANCE: ${{ needs.config.outputs.provenance }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
+      DIST_DIR: ${{ needs.config.outputs.dist_dir }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+      - name: Build
+        if: steps.scripts.outputs.has_build == 'true'
+        run: |
+          set -e
+          set -o pipefail
+          echo "🏗️ Running build: npm run build"
+          npm run build
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+      - name: Publish to NPM
+        if: env.IS_RELEASE_BRANCH == 'true'
+        env:
+          PROVENANCE: ${{ env.PROVENANCE }}
+          NPM_TAG: ${{ env.RELEASE_BRANCH }}
+        run: |
+          set -e
+          set -o pipefail
+          echo "🚢 Publishing to NPM..."
+          PUBLISH_ARGS=()
+          if [ "$PROVENANCE" == "true" ]; then
+            PUBLISH_ARGS+=("--provenance")
+          fi
+          if [ -n "$NPM_TAG" ]; then
+            PUBLISH_ARGS+=("--tag" "$NPM_TAG")
+          fi
+          npm publish "${PUBLISH_ARGS[@]}"
+          echo "✅ Successfully published $PACKAGE_NAME@$RELEASE_VERSION"
+        working-directory: ${{ env.DIST_DIR }}
 
   report:
     runs-on: ubuntu-latest
