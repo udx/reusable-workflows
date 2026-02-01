@@ -4,9 +4,9 @@ on:
   workflow_call:
     inputs:
       node_version:
-        description: "Node.js: Version to use (default: 20)"
+        description: "Node.js: Version to use (default: 22)"
         required: false
-        default: "20"
+        default: "22"
         type: string
       provenance:
         description: "NPM: Enable provenance for the release (default: true)"
@@ -84,7 +84,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "📦 Package: $NAME@$VERSION"
-        working-directory: $WORKING_DIRECTORY
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Determine Branch Information
         id: branches
