@@ -156,12 +156,12 @@ jobs:
       - name: Gate check
         id: gate
         run: |
-          if [ "${{ IS_RELEASE_BRANCH }}" == "true" ]; then
+          if [ "$IS_RELEASE_BRANCH" == "true" ]; then
             echo "release_allowed=true" >> $GITHUB_OUTPUT
-            echo "✅ Release branch detected: ${{ CURRENT_BRANCH }}"
+            echo "✅ Release branch detected: $CURRENT_BRANCH"
           else
             echo "release_allowed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Non-release branch: ${{ CURRENT_BRANCH }}"
+            echo "ℹ️ Non-release branch: $CURRENT_BRANCH"
           fi
 
   build-and-test:
