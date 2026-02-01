@@ -23,11 +23,11 @@ on:
         required: false
         default: true
         type: boolean
-      working_directory:
+      dist_dir:
         description: "Common: Directory containing package.json"
         required: false
         type: string
-        default: "."
+        default: "dist"
     secrets:
       slack_webhook_url:
         description: "Slack: Webhook URL for notifications (Optional)"
@@ -42,6 +42,7 @@ jobs:
       release_branch: ${{ steps.store_inputs.outputs.release_branch }}
       enable_gh_release: ${{ steps.store_inputs.outputs.enable_gh_release }}
       working_directory: ${{ steps.store_inputs.outputs.working_directory }}
+      dist_dir: ${{ steps.store_inputs.outputs.dist_dir }}
       current_branch: ${{ steps.branches.outputs.branch_name }}
       is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
       release_version: ${{ steps.package_version.outputs.version }}
@@ -53,7 +54,8 @@ jobs:
       PROVENANCE: ${{ inputs.provenance }}
       RELEASE_BRANCH: ${{ inputs.release_branch }}
       ENABLE_GH_RELEASE: ${{ inputs.enable_gh_release }}
-      WORKING_DIRECTORY: ${{ inputs.working_directory }}
+      WORKING_DIRECTORY: "."
+      DIST_DIR: ${{ inputs.dist_dir }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -68,6 +70,7 @@ jobs:
           echo "Release branch: $RELEASE_BRANCH"
           echo "GitHub release: $ENABLE_GH_RELEASE"
           echo "Working directory: $WORKING_DIRECTORY"
+          echo "Dist directory: $DIST_DIR"
 
           echo "Set output from inputs..."
           echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
@@ -75,6 +78,7 @@ jobs:
           echo "release_branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
           echo "enable_gh_release=$ENABLE_GH_RELEASE" >> $GITHUB_OUTPUT
           echo "working_directory=$WORKING_DIRECTORY" >> $GITHUB_OUTPUT
+          echo "dist_dir=$DIST_DIR" >> $GITHUB_OUTPUT
 
       - name: Get Package Info
         id: package_version
@@ -152,6 +156,7 @@ jobs:
           echo "Release branch: $RELEASE_BRANCH"
           echo "GitHub release: $ENABLE_GH_RELEASE == 'true' && 'enabled' || 'disabled'"
           echo "Working dir: $WORKING_DIRECTORY"
+          echo "Dist dir: $DIST_DIR"
 
   gate:
     runs-on: ubuntu-latest
@@ -208,11 +213,6 @@ jobs:
         run: npm ci
         working-directory: $WORKING_DIRECTORY
 
-      - name: Run Tests
-        if: steps.scripts.outputs.has_test == 'true'
-        run: npm test
-        working-directory: $WORKING_DIRECTORY
-
       - name: Run Build
         if: steps.scripts.outputs.has_build == 'true'
         run: |
@@ -220,6 +220,11 @@ jobs:
           set -o pipefail
           echo "🏗️ Running build: npm run build"
           npm run build
+        working-directory: $WORKING_DIRECTORY
+
+      - name: Run Tests
+        if: steps.scripts.outputs.has_test == 'true'
+        run: npm test
         working-directory: $WORKING_DIRECTORY
 
   npm-release:
@@ -231,7 +236,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write # Required for provenance
+      id-token: write
     env:
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
       RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
@@ -240,6 +245,7 @@ jobs:
       PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
       PROVENANCE: ${{ needs.config.outputs.provenance }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
+      DIST_DIR: ${{ needs.config.outputs.dist_dir }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -253,6 +259,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: $WORKING_DIRECTORY
+
+      - name: Build
+        if: steps.scripts.outputs.has_build == 'true'
+        run: |
+          set -e
+          set -o pipefail
+          echo "🏗️ Running build: npm run build"
+          npm run build
         working-directory: $WORKING_DIRECTORY
 
       - name: Publish to NPM
@@ -273,7 +288,7 @@ jobs:
           fi
           npm publish "${PUBLISH_ARGS[@]}"
           echo "✅ Successfully published $PACKAGE_NAME@$RELEASE_VERSION"
-        working-directory: $WORKING_DIRECTORY
+        working-directory: $DIST_DIR
 
   github-release:
     needs: [config, gate, build-and-test]

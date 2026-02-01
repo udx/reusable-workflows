@@ -44,7 +44,7 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 | `provenance`        | NPM: Enable provenance                           | `true`   |
 | `release_branch`    | Branch: Deployment branch that triggers releases | `latest` |
 | `enable_gh_release` | GitHub: Whether to create a GitHub release       | `true`   |
-| `working_directory` | Common: Directory containing package.json        | `.`      |
+| `dist_dir`          | Common: Directory containing package.json        | `dist`   |
 
 ## Workflow Secrets
 

@@ -15,7 +15,7 @@ jobs:
       node_version: "22"
       release_branch: "latest"
       provenance: "true"
-      working_directory: "./dist"
+      dist_dir: "dist"
       enable_gh_release: "true"
     secrets:
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
