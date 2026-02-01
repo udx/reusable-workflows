@@ -86,4 +86,4 @@ jobs:
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
 # Full Documentation:
-#   - See docs/docker-ops.md for complete setup guides, troubleshooting, and best practices
+#   - See docs/workflows/docker-ops.md for complete setup guides, troubleshooting, and best practices

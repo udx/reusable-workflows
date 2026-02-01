@@ -12,11 +12,10 @@ jobs:
       id-token: write
     uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
     with:
-      node_version: "20"
-      build_command: "npm run build"
-      test_command: "npm test"
+      node_version: "22"
       release_branch: "latest"
       provenance: "true"
+      dist_dir: "dist"
+      enable_gh_release: "true"
     secrets:
-      npm_token: ${{ secrets.NPM_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
