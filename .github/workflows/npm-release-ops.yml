@@ -193,9 +193,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: $NODE_VERSION
+          node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: $WORKING_DIRECTORY/package-lock.json
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
 
       - name: Detect npm scripts
         id: scripts
@@ -203,7 +203,7 @@ jobs:
           set -e
           set -o pipefail
           node -e "const s=require('./package.json').scripts||{}; console.log('has_test='+(!!s.test)); console.log('has_build='+(!!s.build));"
-        working-directory: $WORKING_DIRECTORY
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Install dependencies
         if: |
@@ -211,7 +211,7 @@ jobs:
           steps.scripts.outputs.has_build == 'true' ||
           env.IS_RELEASE_BRANCH == 'true'
         run: npm ci
-        working-directory: $WORKING_DIRECTORY
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Run Build
         if: steps.scripts.outputs.has_build == 'true'
@@ -220,12 +220,12 @@ jobs:
           set -o pipefail
           echo "🏗️ Running build: npm run build"
           npm run build
-        working-directory: $WORKING_DIRECTORY
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Run Tests
         if: steps.scripts.outputs.has_test == 'true'
         run: npm test
-        working-directory: $WORKING_DIRECTORY
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
   npm-release:
     needs: [config, gate, build-and-test]
