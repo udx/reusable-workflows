@@ -61,6 +61,15 @@ jobs:
       - name: Store inputs as outputs
         id: store_inputs
         run: |
+
+          echo "Inputs Preview:"
+          echo "Node version: $NODE_VERSION"
+          echo "Provenance: $PROVENANCE"
+          echo "Release branch: $RELEASE_BRANCH"
+          echo "GitHub release: $ENABLE_GH_RELEASE"
+          echo "Working directory: $WORKING_DIRECTORY"
+
+          echo "Set output from inputs..."
           echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "provenance=$PROVENANCE" >> $GITHUB_OUTPUT
           echo "release_branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
