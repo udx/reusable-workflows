@@ -299,7 +299,8 @@ jobs:
       always() &&
       needs.gate.outputs.release_allowed == 'true' &&
       needs.build-and-test.result == 'success' &&
-      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
+      needs.config.outputs.has_build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -313,6 +314,7 @@ jobs:
       PROVENANCE: ${{ needs.config.outputs.provenance }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       DIST_DIR: ${{ needs.config.outputs.dist_dir }}
+      HAS_BUILD: ${{ needs.config.outputs.has_build }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -329,7 +331,7 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Build
-        if: steps.scripts.outputs.has_build == 'true'
+        if: env.HAS_BUILD == 'true'
         run: |
           echo "🏗️ Running build: npm run build"
           npm run build
