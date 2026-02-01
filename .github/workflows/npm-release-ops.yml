@@ -299,7 +299,7 @@ jobs:
       always() &&
       needs.gate.outputs.release_allowed == 'true' &&
       needs.build-and-test.result == 'success' &&
-      needs.github-release.result == 'success'
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
