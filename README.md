@@ -14,11 +14,11 @@ Production-ready GitHub Actions workflows for CI/CD. Self-contained, configurabl
 
 ## Available Workflows
 
-| Workflow                                                         | Description                                                                                                          | Docs                                 | Example                                      |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------- |
-| **[docker-ops](.github/workflows/docker-ops.yml)**               | Build, scan, and publish Docker images to multiple registries (Docker Hub, GCP, ACR) with security scanning and SBOM | [📖 Docs](docs/docker-ops.md)        | [📋 Example](examples/docker-ops.yml)        |
-| **[npm-release-ops](.github/workflows/npm-release-ops.yml)**     | Build and publish npm packages with provenance, versioning, and release automation                                   | [📖 Docs](docs/npm-release-ops.md)   | [📋 Example](examples/npm-release-ops.yml)   |
-| **[wp-gh-release-ops](.github/workflows/wp-gh-release-ops.yml)** | Generate and publish WordPress plugin releases on GitHub                                                             | [📖 Docs](docs/wp-gh-release-ops.md) | [📋 Example](examples/wp-gh-release-ops.yml) |
+| Workflow                                                         | Description                                                                                                          | Docs                                           | Example                                      |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| **[docker-ops](.github/workflows/docker-ops.yml)**               | Build, scan, and publish Docker images to multiple registries (Docker Hub, GCP, ACR) with security scanning and SBOM | [📖 Docs](docs/workflows/docker-ops.md)        | [📋 Example](examples/docker-ops.yml)        |
+| **[npm-release-ops](.github/workflows/npm-release-ops.yml)**     | Build and publish npm packages with provenance, versioning, and release automation                                   | [📖 Docs](docs/workflows/npm-release-ops.md)   | [📋 Example](examples/npm-release-ops.yml)   |
+| **[wp-gh-release-ops](.github/workflows/wp-gh-release-ops.yml)** | Generate and publish WordPress plugin releases on GitHub                                                             | [📖 Docs](docs/workflows/wp-gh-release-ops.md) | [📋 Example](examples/wp-gh-release-ops.yml) |
 
 ## Features
 
@@ -39,13 +39,15 @@ Each template is structured as follows:
 ## Development
 
 ### Adding a Template
+
 To add a new reusable workflow:
+
 1. Create your workflow in `.github/workflows/`.
-2. Prefix internal repository workflows with `_` to keep them out of the public catalog.
-3. Add a setup guide in `docs/` and an usage example in `examples/`.
-4. Ensure your workflow inputs follow the standard registry-prefix naming convention in descriptions (e.g., `Docker Hub: Image Name`).
+2. Add a setup guide in `docs/` and an usage example in `examples/`.
+3. Ensure your workflow inputs follow the standard registry-prefix naming convention in descriptions (e.g., `Docker Hub: Image Name`).
 
 ### Internal Infrastructure
+
 Infrastructure workflows (tests, release automation, etc.) are marked with a `_` prefix and are intended for internal use only.
 
 ## License
