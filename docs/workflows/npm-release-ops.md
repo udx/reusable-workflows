@@ -2,7 +2,7 @@
 
 <!-- short: Publish npm packages with provenance and GitHub releases -->
 
-A reusable workflow to publish npm packages with security best practices, optional build/test steps, and GitHub release generation.
+A reusable workflow to publish npm packages with security best practices, optional build/test steps (via `--if-present`), and GitHub release generation. Build/test run on every trigger; release steps run only on the configured release branch.
 
 ## Setup Guide
 
@@ -25,22 +25,22 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 
 ### Release Branch
 
-- Runs tests (`npm test` if a `test` script exists).
-- Runs build (`npm run build` if a `build` script exists).
+- Runs tests (`npm test --if-present`).
+- Runs build (`npm run build --if-present`).
 - Runs publish step with provenance (if enabled).
 - Creates a GitHub release if `enable_gh_release` is true.
 
 ### Non-Release Branch
 
-- Runs tests (`npm test` if a `test` script exists).
-- Runs build (`npm run build` if a `build` script exists).
+- Runs tests (`npm test --if-present`).
+- Runs build (`npm run build --if-present`).
 - Does not publish to npm.
 
 ## Workflow Inputs
 
 | Input               | Description                                      | Default  |
 | ------------------- | ------------------------------------------------ | -------- |
-| `node_version`      | Node.js: Version to use                          | `20`     |
+| `node_version`      | Node.js: Version to use                          | `22`     |
 | `provenance`        | NPM: Enable provenance                           | `true`   |
 | `release_branch`    | Branch: Deployment branch that triggers releases | `latest` |
 | `enable_gh_release` | GitHub: Whether to create a GitHub release       | `true`   |

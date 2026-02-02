@@ -47,8 +47,6 @@ jobs:
       is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
       release_version: ${{ steps.package_version.outputs.release_version }}
       package_name: ${{ steps.package_version.outputs.package_name }}
-      has_test: ${{ steps.npm_scripts.outputs.has_test }}
-      has_build: ${{ steps.npm_scripts.outputs.has_build }}
       has_slack_webhook: ${{ steps.check_slack.outputs.has_webhook }}
       changelog_description: ${{ steps.changelog.outputs.description }}
     env:
@@ -118,27 +116,6 @@ jobs:
           echo "is_release_branch=${IS_RELEASE_BRANCH}" >> $GITHUB_OUTPUT
           echo "📌 Branch: ${BRANCH_NAME} (Release: ${IS_RELEASE_BRANCH})"
 
-      - name: Determine NPM Scripts
-        id: npm_scripts
-        run: |
-          has_test=$(node -e "const scripts=require('./package.json').scripts||{};console.log((!!scripts.test));")
-
-          if [ "$has_test" == "true" ]; then
-            echo "npm test is available"
-          else
-            echo "npm test is not set"
-          fi
-
-          has_build=$(node -e "const scripts=require('./package.json').scripts||{};console.log((!!scripts.build));")
-          if [ "$has_build" == "true" ]; then
-            echo "npm build is available"
-          else
-            echo "npm build is not set"
-          fi
-
-          echo "has_test=$has_test" >> $GITHUB_OUTPUT
-          echo "has_build=$has_build" >> $GITHUB_OUTPUT
-
       - name: Check Slack Webhook
         id: check_slack
         env:
@@ -192,10 +169,8 @@ jobs:
           ENABLE_GH_RELEASE: ${{ steps.store_inputs.outputs.enable_gh_release }}
           WORKING_DIRECTORY: ${{ steps.store_inputs.outputs.working_directory }}
           DIST_DIR: ${{ steps.store_inputs.outputs.dist_dir }}
-          HAS_BUILD: ${{ steps.store_inputs.outputs.has_build }}
-          HAS_TEST: ${{ steps.store_inputs.outputs.has_test }}
           IS_RELEASE_BRANCH: ${{ steps.branches.outputs.is_release_branch }}
-          CURRENT_BRANCH: ${{ steps.branches.outputs.current_branch }}
+          CURRENT_BRANCH: ${{ steps.branches.outputs.branch_name }}
           RELEASE_VERSION: ${{ steps.package_version.outputs.release_version }}
           PACKAGE_NAME: ${{ steps.package_version.outputs.package_name }}
           HAS_WEBHOOK: ${{ steps.check_slack.outputs.has_webhook }}
@@ -213,8 +188,6 @@ jobs:
           echo "Package name: $PACKAGE_NAME"
           echo "Has slack webhook: $HAS_WEBHOOK"
           echo "Changelog description: $DESCRIPTION"
-          echo "Has test script: $HAS_TEST"
-          echo "Has build script: $HAS_BUILD"
           echo "Is release branch: $IS_RELEASE_BRANCH"
           echo "Current branch: $CURRENT_BRANCH"
 
@@ -242,17 +215,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [config, gate]
     if: |
-      always() && 
-      needs.gate.result == 'success' && 
-      needs.gate.outputs.release_allowed == 'true' && 
-      (needs.config.outputs.has_test == 'true' || 
-      needs.config.outputs.has_build == 'true')
+      always() &&
+      needs.gate.result == 'success'
     env:
       NODE_VERSION: ${{ needs.config.outputs.node_version }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
-      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
-      HAS_TEST: ${{ needs.config.outputs.has_test }}
-      HAS_BUILD: ${{ needs.config.outputs.has_build }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -269,15 +236,13 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Run Build
-        if: env.HAS_BUILD == 'true'
         run: |
-          echo "🏗️ Running build: npm run build"
-          npm run build
+          echo "🏗️ Running build (if present): npm run build --if-present"
+          npm run build --if-present
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Run Tests
-        if: env.HAS_TEST == 'true'
-        run: npm test
+        run: npm test --if-present
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
   github-release:
@@ -329,8 +294,7 @@ jobs:
       always() &&
       needs.gate.outputs.release_allowed == 'true' &&
       needs.build-and-test.result == 'success' &&
-      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
-      needs.config.outputs.has_build == 'true'
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -344,7 +308,8 @@ jobs:
       PROVENANCE: ${{ needs.config.outputs.provenance }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       DIST_DIR: ${{ needs.config.outputs.dist_dir }}
-      HAS_BUILD: ${{ needs.config.outputs.has_build }}
+    environment:
+      name: ${{ needs.config.outputs.current_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -361,10 +326,9 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Build
-        if: env.HAS_BUILD == 'true'
         run: |
-          echo "🏗️ Running build: npm run build"
-          npm run build
+          echo "🏗️ Running build (if present): npm run build --if-present"
+          npm run build --if-present
         working-directory: ${{ env.WORKING_DIRECTORY }}
 
       - name: Publish to NPM
@@ -406,8 +370,8 @@ jobs:
           echo "Is release branch: $IS_RELEASE_BRANCH"
           echo "NPM release result: $NPM_RELEASE_RESULT"
           echo "GitHub release result: $GITHUB_RELEASE_RESULT"
-          echo "Tests: npm test (if script exists)"
-          echo "Build: npm run build (if script exists)"
+          echo "Tests: npm test --if-present"
+          echo "Build: npm run build --if-present"
           if [ "$IS_RELEASE_BRANCH" == "true" ]; then
             echo "Publish: enabled"
             echo "GitHub Release: $ENABLE_GH_RELEASE == 'true' && 'enabled' || 'disabled'"
