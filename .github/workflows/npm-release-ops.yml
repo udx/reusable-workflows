@@ -32,6 +32,9 @@ on:
       slack_webhook_url:
         description: "Slack: Webhook URL for notifications (Optional)"
         required: false
+      gh_token:
+        description: "GitHub: Token override for release/tagging (defaults to github.token)"
+        required: false
 
 jobs:
   config:
@@ -277,7 +280,7 @@ jobs:
 
       - name: Create Git Tag
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.gh_token || github.token }}
         run: |
           git tag "$RELEASE_VERSION"
           git push origin "$RELEASE_VERSION"
@@ -288,7 +291,7 @@ jobs:
           name: "${{ env.RELEASE_VERSION }}"
           tag_name: "${{ env.RELEASE_VERSION }}"
           body: "${{ env.CHANGELOG_DESCRIPTION }}"
-          token: ${{ github.token }}
+          token: ${{ secrets.gh_token || github.token }}
 
   npm-release:
     needs: [config, gate, build-and-test, github-release]

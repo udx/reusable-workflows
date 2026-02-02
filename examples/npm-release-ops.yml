@@ -19,3 +19,4 @@ jobs:
       enable_gh_release: "true"
     secrets:
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+      gh_token: ${{ secrets.GH_TOKEN }}
