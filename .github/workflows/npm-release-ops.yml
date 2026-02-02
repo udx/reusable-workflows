@@ -256,6 +256,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    environment:
+      name: ${{ needs.config.outputs.current_branch }}
     env:
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
       CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
@@ -299,6 +301,8 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    environment:
+      name: ${{ needs.config.outputs.current_branch }}
     env:
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
       RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
@@ -308,8 +312,6 @@ jobs:
       PROVENANCE: ${{ needs.config.outputs.provenance }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       DIST_DIR: ${{ needs.config.outputs.dist_dir }}
-    environment:
-      name: ${{ needs.config.outputs.current_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
