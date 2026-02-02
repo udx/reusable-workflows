@@ -48,9 +48,14 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 
 ## Workflow Secrets
 
-| Secret              | Description                          | Required |
-| ------------------- | ------------------------------------ | -------- |
-| `slack_webhook_url` | Slack: Webhook URL for notifications | Optional |
+| Secret              | Description                                                     | Required |
+| ------------------- | --------------------------------------------------------------- | -------- |
+| `slack_webhook_url` | Slack: Webhook URL for notifications                            | Optional |
+| `gh_token`          | GitHub: Token override for tagging/release (defaults to `github.token`) | Optional |
+
+### When to provide `gh_token`
+
+Use a custom token if your org enforces protected tag/branch rules that the default `github.token` cannot bypass (for example, tagging requires a service account or specific allowlist).
 
 ## Security and Provenance
 
