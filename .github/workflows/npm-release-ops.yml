@@ -282,14 +282,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.gh_token || github.token }}
         run: |
-          git tag "$RELEASE_VERSION"
-          git push origin "$RELEASE_VERSION"
+          git tag "v$RELEASE_VERSION"
+          git push origin "v$RELEASE_VERSION"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ env.RELEASE_VERSION }}"
-          tag_name: "${{ env.RELEASE_VERSION }}"
+          name: "Release v${{ env.RELEASE_VERSION }}"
+          tag_name: "v${{ env.RELEASE_VERSION }}"
           body: "${{ env.CHANGELOG_DESCRIPTION }}"
           token: ${{ secrets.gh_token || github.token }}
 
