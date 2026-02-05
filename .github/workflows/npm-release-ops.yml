@@ -6,7 +6,7 @@ on:
       node_version:
         description: "Node.js: Version to use (default: 22)"
         required: false
-        default: "22"
+        default: "24"
         type: string
       provenance:
         description: "NPM: Enable provenance for the release (default: true)"
