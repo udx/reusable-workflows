@@ -5,6 +5,7 @@ Reusable workflow documentation and setup guides live in `docs/workflows/`.
 ## Workflow Docs
 
 - `docs/workflows/docker-ops.md`
+- `docs/workflows/js-ops.md`
 - `docs/workflows/npm-release-ops.md`
 - `docs/workflows/wp-gh-release-ops.md`
 

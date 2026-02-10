@@ -1,0 +1,446 @@
+---
+name: JS App Release Ops
+
+# Reusable workflow for immutable Next.js standalone bundle releases.
+# Supports npm/yarn, runs quality/security scripts when present in package.json,
+# publishes release assets to GitHub, and emits release metadata.
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application name used for artifact names and release metadata."
+        required: false
+        default: ""
+        type: string
+      working_directory:
+        description: "Directory containing package.json."
+        required: false
+        default: "."
+        type: string
+      node_version:
+        description: "Node.js version used for install/build steps."
+        required: false
+        default: "24"
+        type: string
+      package_manager:
+        description: "Package manager to use: npm or yarn. If empty, workflow auto-detects."
+        required: false
+        default: ""
+        type: string
+    secrets:
+      gh_token:
+        description: "Optional GitHub token override for release publishing."
+        required: false
+    outputs:
+      version:
+        description: "Release version (from package.json version)."
+        value: ${{ jobs.config.outputs.version }}
+      artifact_type:
+        description: "Artifact type produced by this workflow."
+        value: ${{ jobs.config.outputs.artifact_type }}
+      bundle_artifact_name:
+        description: "Bundle artifact name."
+        value: ${{ jobs.config.outputs.bundle_artifact_name }}
+      bundle_sha256:
+        description: "SHA-256 checksum of bundle tar.gz."
+        value: ${{ jobs.build-and-scan.outputs.bundle_sha256 }}
+      release_metadata_artifact:
+        description: "Artifact name containing release.json."
+        value: ${{ jobs.config.outputs.release_metadata_artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: Resolve Config
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.pkg.outputs.package_version }}
+      artifact_type: ${{ steps.meta.outputs.artifact_type }}
+      bundle_artifact_name: ${{ steps.meta.outputs.bundle_artifact_name }}
+      release_metadata_artifact: ${{ steps.meta.outputs.release_metadata_artifact }}
+      release_assets_artifact: ${{ steps.meta.outputs.release_assets_artifact }}
+      bundle_file_name: ${{ steps.meta.outputs.bundle_file_name }}
+      checksum_file_name: ${{ steps.meta.outputs.checksum_file_name }}
+      metadata_file_name: ${{ steps.meta.outputs.metadata_file_name }}
+      install_cmd: ${{ steps.commands.outputs.install_cmd }}
+      build_cmd: ${{ steps.commands.outputs.build_cmd }}
+      lint_cmd: ${{ steps.commands.outputs.lint_cmd }}
+      typecheck_cmd: ${{ steps.commands.outputs.typecheck_cmd }}
+      test_cmd: ${{ steps.commands.outputs.test_cmd }}
+      scan_cmd: ${{ steps.commands.outputs.scan_cmd }}
+      has_lint: ${{ steps.pkg.outputs.has_lint }}
+      has_typecheck: ${{ steps.pkg.outputs.has_typecheck }}
+      has_test: ${{ steps.pkg.outputs.has_test }}
+      has_scan: ${{ steps.pkg.outputs.has_scan }}
+      package_name: ${{ steps.pkg.outputs.package_name }}
+      package_version: ${{ steps.pkg.outputs.package_version }}
+      app_name: ${{ steps.pkg.outputs.app_name }}
+      node_version: ${{ steps.validate.outputs.node_version }}
+      working_directory: ${{ steps.validate.outputs.working_directory }}
+      package_manager: ${{ steps.pkg.outputs.package_manager }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Validate inputs
+        id: validate
+        run: |
+          wd="${{ inputs.working_directory }}"
+          node_version="${{ inputs.node_version }}"
+
+          if [[ -z "${wd}" ]]; then
+            wd="."
+          fi
+
+          if [[ ! -d "${wd}" ]]; then
+            echo "::error::working_directory does not exist: ${wd}"
+            exit 1
+          fi
+
+          if [[ ! -f "${wd}/package.json" ]]; then
+            echo "::error::package.json not found in working_directory: ${wd}"
+            exit 1
+          fi
+
+          echo "node_version=${node_version}" >> "${GITHUB_OUTPUT}"
+          echo "working_directory=${wd}" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.validate.outputs.node_version }}
+
+      - name: Read package metadata and scripts
+        id: pkg
+        working-directory: ${{ steps.validate.outputs.working_directory }}
+        env:
+          INPUT_PACKAGE_MANAGER: ${{ inputs.package_manager }}
+          INPUT_APP_NAME: ${{ inputs.app_name }}
+        run: |
+          node - <<'NODE' >> "${GITHUB_OUTPUT}"
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const scripts = pkg.scripts || {};
+
+          if (!pkg.name || !pkg.version) {
+            console.error('package.json must contain both "name" and "version" fields.');
+            process.exit(1);
+          }
+          if (!scripts.build) {
+            console.error('package.json scripts.build is required.');
+            process.exit(1);
+          }
+
+          const inputPm = (process.env.INPUT_PACKAGE_MANAGER || '').trim();
+          const inputAppName = (process.env.INPUT_APP_NAME || '').trim();
+          const pkgPm = (pkg.packageManager || '').trim();
+          const hasYarnLock = fs.existsSync('yarn.lock');
+          const hasNpmLock = fs.existsSync('package-lock.json') || fs.existsSync('npm-shrinkwrap.json');
+          let packageManager = 'npm';
+
+          if (inputPm) {
+            if (inputPm !== 'npm' && inputPm !== 'yarn') {
+              console.error('package_manager must be one of: npm, yarn');
+              process.exit(1);
+            }
+            packageManager = inputPm;
+          } else if (pkgPm.startsWith('yarn@')) {
+            packageManager = 'yarn';
+          } else if (pkgPm.startsWith('npm@')) {
+            packageManager = 'npm';
+          } else if (hasYarnLock && !hasNpmLock) {
+            packageManager = 'yarn';
+          }
+
+          const rawAppName = inputAppName || pkg.name;
+          const appName = rawAppName
+            .replace(/^@/, '')
+            .replace(/\//g, '-')
+            .replace(/[^a-zA-Z0-9._-]/g, '-');
+
+          const names = ['lint', 'typecheck', 'test', 'scan', 'build'];
+          console.log(`app_name=${appName}`);
+          console.log(`package_manager=${packageManager}`);
+          console.log(`package_name=${pkg.name}`);
+          console.log(`package_version=${pkg.version}`);
+          for (const name of names) {
+            console.log(`has_${name}=${scripts[name] ? 'true' : 'false'}`);
+          }
+          NODE
+
+      - name: Resolve package-manager commands
+        id: commands
+        env:
+          PM: ${{ steps.pkg.outputs.package_manager }}
+          WD: ${{ steps.validate.outputs.working_directory }}
+        run: |
+          if [[ "${PM}" == "npm" ]]; then
+            if [[ -f "${WD}/package-lock.json" || -f "${WD}/npm-shrinkwrap.json" ]]; then
+              install_cmd="npm ci"
+            else
+              install_cmd="npm install"
+            fi
+            build_cmd="npm run build"
+            lint_cmd="npm run lint"
+            typecheck_cmd="npm run typecheck"
+            test_cmd="npm run test"
+            scan_cmd="npm run scan"
+          else
+            if [[ -f "${WD}/yarn.lock" ]]; then
+              install_cmd="corepack enable && yarn install --immutable || yarn install --frozen-lockfile || yarn install"
+            else
+              install_cmd="corepack enable && yarn install"
+            fi
+            build_cmd="yarn build"
+            lint_cmd="yarn lint"
+            typecheck_cmd="yarn typecheck"
+            test_cmd="yarn test"
+            scan_cmd="yarn scan"
+          fi
+
+          echo "install_cmd=${install_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "build_cmd=${build_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "lint_cmd=${lint_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "typecheck_cmd=${typecheck_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "test_cmd=${test_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "scan_cmd=${scan_cmd}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build artifact metadata
+        id: meta
+        env:
+          APP_NAME: ${{ steps.pkg.outputs.app_name }}
+          VERSION: ${{ steps.pkg.outputs.package_version }}
+        run: |
+          bundle_artifact_name="${APP_NAME}-${VERSION}-bundle"
+          release_metadata_artifact="${APP_NAME}-${VERSION}-release-metadata"
+          release_assets_artifact="${APP_NAME}-${VERSION}-release-assets"
+          bundle_file_name="${bundle_artifact_name}.tar.gz"
+          checksum_file_name="${bundle_file_name}.sha256"
+          metadata_file_name="release.json"
+
+          echo "bundle_artifact_name=${bundle_artifact_name}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_type=bundle" >> "${GITHUB_OUTPUT}"
+          echo "release_metadata_artifact=${release_metadata_artifact}" >> "${GITHUB_OUTPUT}"
+          echo "release_assets_artifact=${release_assets_artifact}" >> "${GITHUB_OUTPUT}"
+          echo "bundle_file_name=${bundle_file_name}" >> "${GITHUB_OUTPUT}"
+          echo "checksum_file_name=${checksum_file_name}" >> "${GITHUB_OUTPUT}"
+          echo "metadata_file_name=${metadata_file_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Config summary
+        env:
+          APP_NAME: ${{ steps.pkg.outputs.app_name }}
+          PACKAGE_MANAGER: ${{ steps.pkg.outputs.package_manager }}
+          NODE_VERSION: ${{ steps.validate.outputs.node_version }}
+          WD: ${{ steps.validate.outputs.working_directory }}
+          PKG_NAME: ${{ steps.pkg.outputs.package_name }}
+          PKG_VERSION: ${{ steps.pkg.outputs.package_version }}
+          HAS_LINT: ${{ steps.pkg.outputs.has_lint }}
+          HAS_TYPECHECK: ${{ steps.pkg.outputs.has_typecheck }}
+          HAS_TEST: ${{ steps.pkg.outputs.has_test }}
+          HAS_SCAN: ${{ steps.pkg.outputs.has_scan }}
+        run: |
+          {
+            echo "## JS Ops Configuration"
+            echo ""
+            echo "- app: ${APP_NAME}"
+            echo "- working directory: ${WD}"
+            echo "- package manager: ${PACKAGE_MANAGER}"
+            echo "- node version: ${NODE_VERSION}"
+            echo "- package: ${PKG_NAME}@${PKG_VERSION}"
+            echo "- release version: ${PKG_VERSION}"
+            echo "- lint script present: ${HAS_LINT}"
+            echo "- typecheck script present: ${HAS_TYPECHECK}"
+            echo "- test script present: ${HAS_TEST}"
+            echo "- scan script present: ${HAS_SCAN}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  build-and-scan:
+    name: Build and Scan
+    runs-on: ubuntu-24.04
+    needs: config
+    permissions:
+      contents: read
+    outputs:
+      bundle_sha256: ${{ steps.bundle.outputs.bundle_sha256 }}
+    env:
+      VERSION: ${{ needs.config.outputs.version }}
+      BUNDLE_ARTIFACT_NAME: ${{ needs.config.outputs.bundle_artifact_name }}
+      RELEASE_METADATA_ARTIFACT: ${{ needs.config.outputs.release_metadata_artifact }}
+      RELEASE_ASSETS_ARTIFACT: ${{ needs.config.outputs.release_assets_artifact }}
+      BUNDLE_FILE_NAME: ${{ needs.config.outputs.bundle_file_name }}
+      CHECKSUM_FILE_NAME: ${{ needs.config.outputs.checksum_file_name }}
+      METADATA_FILE_NAME: ${{ needs.config.outputs.metadata_file_name }}
+      INSTALL_CMD: ${{ needs.config.outputs.install_cmd }}
+      BUILD_CMD: ${{ needs.config.outputs.build_cmd }}
+      LINT_CMD: ${{ needs.config.outputs.lint_cmd }}
+      TYPECHECK_CMD: ${{ needs.config.outputs.typecheck_cmd }}
+      TEST_CMD: ${{ needs.config.outputs.test_cmd }}
+      SCAN_CMD: ${{ needs.config.outputs.scan_cmd }}
+      APP_NAME: ${{ needs.config.outputs.app_name }}
+      PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
+      PACKAGE_VERSION: ${{ needs.config.outputs.package_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ needs.config.outputs.node_version }}
+          cache: ${{ needs.config.outputs.package_manager }}
+          cache-dependency-path: |
+            ${{ needs.config.outputs.working_directory }}/package-lock.json
+            ${{ needs.config.outputs.working_directory }}/npm-shrinkwrap.json
+            ${{ needs.config.outputs.working_directory }}/yarn.lock
+
+      - name: Install dependencies
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: ${{ env.INSTALL_CMD }}
+
+      - name: Run lint
+        if: ${{ needs.config.outputs.has_lint == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: ${{ env.LINT_CMD }}
+
+      - name: Run typecheck
+        if: ${{ needs.config.outputs.has_typecheck == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: ${{ env.TYPECHECK_CMD }}
+
+      - name: Run test
+        if: ${{ needs.config.outputs.has_test == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: ${{ env.TEST_CMD }}
+
+      - name: Run scan
+        if: ${{ needs.config.outputs.has_scan == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: ${{ env.SCAN_CMD }}
+
+      - name: Build app
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        env:
+          NODE_ENV: production
+        run: ${{ env.BUILD_CMD }}
+
+      - name: Package bundle
+        id: bundle
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          if [[ ! -d ".next/standalone" ]]; then
+            echo "::error::.next/standalone not found. Configure Next.js output: 'standalone'."
+            exit 1
+          fi
+
+          staging_root="${RUNNER_TEMP}/${APP_NAME}-${VERSION}"
+          assets_dir="${RUNNER_TEMP}/release-assets"
+          tar_path="${assets_dir}/${BUNDLE_FILE_NAME}"
+          checksum_path="${assets_dir}/${CHECKSUM_FILE_NAME}"
+          metadata_path="${assets_dir}/${METADATA_FILE_NAME}"
+          bundle_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/${BUNDLE_FILE_NAME}"
+          build_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          rm -rf "${staging_root}" "${assets_dir}"
+          mkdir -p "${staging_root}" "${assets_dir}"
+
+          cp -R .next/standalone/. "${staging_root}/"
+          mkdir -p "${staging_root}/.next"
+          if [[ -d ".next/static" ]]; then
+            cp -R ".next/static" "${staging_root}/.next/static"
+          fi
+          if [[ -d "public" ]]; then
+            cp -R "public" "${staging_root}/public"
+          fi
+
+          tar -C "${RUNNER_TEMP}" -czf "${tar_path}" "$(basename "${staging_root}")"
+          bundle_sha256="$(sha256sum "${tar_path}" | awk '{print $1}')"
+          printf '%s  %s\n' "${bundle_sha256}" "${BUNDLE_FILE_NAME}" > "${checksum_path}"
+
+          export APP_NAME
+          export VERSION
+          export PACKAGE_NAME
+          export PACKAGE_VERSION
+          export BUNDLE_URL="${bundle_url}"
+          export BUNDLE_SHA256="${bundle_sha256}"
+          export BUILD_TIMESTAMP="${build_timestamp}"
+          export METADATA_PATH="${metadata_path}"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = {
+            app: process.env.APP_NAME,
+            package_name: process.env.PACKAGE_NAME,
+            package_version: process.env.PACKAGE_VERSION,
+            repo: process.env.GITHUB_REPOSITORY,
+            commit_sha: process.env.GITHUB_SHA,
+            version: process.env.VERSION,
+            artifact_type: 'bundle',
+            bundle_url: process.env.BUNDLE_URL,
+            checksum: process.env.BUNDLE_SHA256,
+            build_timestamp: process.env.BUILD_TIMESTAMP
+          };
+          fs.writeFileSync(process.env.METADATA_PATH, JSON.stringify(data, null, 2) + '\n');
+          NODE
+
+          echo "bundle_sha256=${bundle_sha256}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release-assets/${{ env.BUNDLE_FILE_NAME }}
+            ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
+
+      - name: Upload release metadata artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.RELEASE_METADATA_ARTIFACT }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
+
+      - name: Upload release assets artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.RELEASE_ASSETS_ARTIFACT }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release-assets/${{ env.BUNDLE_FILE_NAME }}
+            ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
+            ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-24.04
+    needs: [config, build-and-scan]
+    if: always() && success()
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download release assets
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ needs.config.outputs.release_assets_artifact }}
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.config.outputs.version }}
+          name: ${{ needs.config.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(needs.config.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            ${{ runner.temp }}/release-assets/${{ needs.config.outputs.bundle_file_name }}
+            ${{ runner.temp }}/release-assets/${{ needs.config.outputs.checksum_file_name }}
+            ${{ runner.temp }}/release-assets/${{ needs.config.outputs.metadata_file_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.gh_token != '' && secrets.gh_token || github.token }}

@@ -1,0 +1,27 @@
+name: Release JS App Bundle
+
+on:
+  push:
+    branches:
+      - latest
+  workflow_dispatch:
+
+jobs:
+  standard-release:
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+
+  configured-release:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      app_name: web-app
+      working_directory: apps/web
+      node_version: "24"
+      package_manager: yarn
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
