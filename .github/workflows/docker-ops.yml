@@ -1051,6 +1051,7 @@ jobs:
           password: ${{ env.DOCKER_PASSWORD }}
 
       - name: Prepare tags
+        id: prepare_tags
         env:
           IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
           RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
@@ -1061,7 +1062,7 @@ jobs:
           [[ "${RELEASE_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid release_version: ${RELEASE_VERSION}"; exit 1; }
           # Keep existing release tag logic: semantic version + latest.
           TAGS="${IMAGE_REF}:${RELEASE_VERSION},${IMAGE_REF}:latest"
-          echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "docker_tags=${TAGS}" >> "$GITHUB_OUTPUT"
           echo "✅ Docker Hub tags prepared: $TAGS"
 
       - name: Download digests
@@ -1074,6 +1075,7 @@ jobs:
       - name: Create Multi-Arch Manifest
         env:
           IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
+          DOCKER_TAGS: ${{ steps.prepare_tags.outputs.docker_tags }}
         run: |
           set -euo pipefail
           [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
