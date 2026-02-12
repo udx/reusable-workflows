@@ -890,33 +890,35 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Prepare tags
-        run: |
-          echo "🔄 Preparing amd64 Docker Hub tags..."
-          # For release branch, use both semantic version and latest tag
-          BASE_TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
-          ARCH_TAGS=""
-          IFS=',' read -ra TAG_ARRAY <<< "$BASE_TAGS"
-          for tag in "${TAG_ARRAY[@]}"; do
-            ARCH_TAGS="${ARCH_TAGS}${ARCH_TAGS:+,}${tag}-amd64"
-          done
-          echo "DOCKER_ARCH_TAGS=$ARCH_TAGS" >> $GITHUB_ENV
-          echo "✅ amd64 tags prepared: $ARCH_TAGS"
-
       - name: Push Image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
           # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
           platforms: linux/amd64
-          push: true
+          # Push by digest (no temp arch tags) so only final manifest tags are published.
+          outputs: type=image,name=${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }},push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: true
           no-cache: true
           build-args: |
             ${{ env.BUILD_ARGS }}
-          tags: ${{ env.DOCKER_ARCH_TAGS }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          DIGEST="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v5
+        with:
+          name: digests-amd64
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Log out
         run: docker logout
@@ -958,33 +960,35 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Prepare tags
-        run: |
-          echo "🔄 Preparing arm64 Docker Hub tags..."
-          # For release branch, use both semantic version and latest tag
-          BASE_TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
-          ARCH_TAGS=""
-          IFS=',' read -ra TAG_ARRAY <<< "$BASE_TAGS"
-          for tag in "${TAG_ARRAY[@]}"; do
-            ARCH_TAGS="${ARCH_TAGS}${ARCH_TAGS:+,}${tag}-arm64"
-          done
-          echo "DOCKER_ARCH_TAGS=$ARCH_TAGS" >> $GITHUB_ENV
-          echo "✅ arm64 tags prepared: $ARCH_TAGS"
-
       - name: Push Image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
           # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
           platforms: linux/arm64
-          push: true
+          # Push by digest (no temp arch tags) so only final manifest tags are published.
+          outputs: type=image,name=${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }},push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: true
           no-cache: true
           build-args: |
             ${{ env.BUILD_ARGS }}
-          tags: ${{ env.DOCKER_ARCH_TAGS }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          DIGEST="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v5
+        with:
+          name: digests-arm64
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Log out
         run: docker logout
@@ -1028,16 +1032,32 @@ jobs:
           echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
           echo "✅ Docker Hub tags prepared: $TAGS"
 
+      - name: Download digests
+        uses: actions/download-artifact@v6
+        with:
+          pattern: digests-*
+          path: /tmp/digests
+          merge-multiple: true
+
       - name: Create Multi-Arch Manifest
         run: |
-          # Manifest creation only combines native per-arch images, so no QEMU is required.
+          # Manifest creation only combines native per-arch digests, so no QEMU and no temp arch tags are required.
+          DIGEST_SOURCES=""
+          for digest_file in /tmp/digests/*; do
+            [ -e "${digest_file}" ] || continue
+            DIGEST_SOURCES="${DIGEST_SOURCES} ${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}@sha256:$(basename "${digest_file}")"
+          done
+          if [ -z "${DIGEST_SOURCES}" ]; then
+            echo "::error::No build digests found for manifest creation."
+            exit 1
+          fi
+
           IFS=',' read -ra TAG_ARRAY <<< "${{ env.DOCKER_TAGS }}"
           for tag in "${TAG_ARRAY[@]}"; do
             echo "🔄 Creating multi-arch manifest for ${tag}"
             docker buildx imagetools create \
               --tag "${tag}" \
-              "${tag}-amd64" \
-              "${tag}-arm64"
+              ${DIGEST_SOURCES}
             docker buildx imagetools inspect "${tag}"
           done
 
