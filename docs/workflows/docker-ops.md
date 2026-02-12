@@ -8,7 +8,7 @@ Reusable workflow for building, scanning, and publishing Docker images to multip
 ## Features
 
 - Multi-platform builds (amd64, arm64)
-- Native per-architecture Docker Hub builds (amd64 + arm64), merged into a single multi-arch tag
+- Native per-architecture Docker Hub builds on matching runners (amd64 on amd64, arm64 on arm64) without emulation
 - Security scanning with Trivy + SBOM generation
 - Publish to Docker Hub, GCP Artifact Registry, and/or Azure Container Registry
 - Slack notifications
@@ -119,6 +119,7 @@ Example: `build_args: "VERSION={{version}},ENV=production"`
 | **Slack**          | After release            | -                                                        | `slack_webhook_url`                                                                                 |
 
 **Docker Hub release tags:**
+- `linux/amd64` and `linux/arm64` are built natively on matching runners (no QEMU/binfmt emulation), then merged into final multi-arch tags
 - Release runs publish only the final tags (`version`, `latest`)
 - Each final tag is a multi-arch manifest including `linux/amd64` and `linux/arm64`
 - Architecture-suffixed release tags (for example `-amd64` / `-arm64`) are not published
