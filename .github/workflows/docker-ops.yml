@@ -854,7 +854,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-  docker-hub-release:
+  build-amd64:
     runs-on: ubuntu-24.04
     needs: [config, github-release]
     if: |
@@ -872,7 +872,6 @@ jobs:
       DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
-      BUILD_PLATFORMS: ${{ needs.config.outputs.build_platforms }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
@@ -893,25 +892,154 @@ jobs:
 
       - name: Prepare tags
         run: |
-          echo "🔄 Preparing Docker Hub tags..."
+          echo "🔄 Preparing amd64 Docker Hub tags..."
           # For release branch, use both semantic version and latest tag
-          TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
-          echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
-          echo "✅ Docker Hub tags prepared: $TAGS"
+          BASE_TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
+          ARCH_TAGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "$BASE_TAGS"
+          for tag in "${TAG_ARRAY[@]}"; do
+            ARCH_TAGS="${ARCH_TAGS}${ARCH_TAGS:+,}${tag}-amd64"
+          done
+          echo "DOCKER_ARCH_TAGS=$ARCH_TAGS" >> $GITHUB_ENV
+          echo "✅ amd64 tags prepared: $ARCH_TAGS"
 
       - name: Push Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
-          platforms: ${{ env.BUILD_PLATFORMS }}
+          # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
+          platforms: linux/amd64
           push: true
           sbom: true
           provenance: true
           no-cache: true
           build-args: |
             ${{ env.BUILD_ARGS }}
-          tags: ${{ env.DOCKER_TAGS }}
+          tags: ${{ env.DOCKER_ARCH_TAGS }}
+
+      - name: Log out
+        run: docker logout
+
+  build-arm64:
+    # TODO: If ubuntu-24.04-arm is unavailable, set ARM64_RUNNER_LABEL to a self-hosted arm64 label.
+    runs-on: ${{ vars.ARM64_RUNNER_LABEL != '' && vars.ARM64_RUNNER_LABEL || 'ubuntu-24.04-arm' }}
+    needs: [config, github-release]
+    if: |
+      always() &&
+      success() &&
+      needs.config.outputs.docker_has_credentials == 'true' &&
+      needs.config.outputs.docker_has_publish_config == 'true' &&
+      needs.config.outputs.is_release_branch == 'true'
+    permissions:
+      contents: write
+    env:
+      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+      DOCKER_PASSWORD: ${{ secrets.docker_token }}
+      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Log in
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_LOGIN }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Prepare tags
+        run: |
+          echo "🔄 Preparing arm64 Docker Hub tags..."
+          # For release branch, use both semantic version and latest tag
+          BASE_TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
+          ARCH_TAGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "$BASE_TAGS"
+          for tag in "${TAG_ARRAY[@]}"; do
+            ARCH_TAGS="${ARCH_TAGS}${ARCH_TAGS:+,}${tag}-arm64"
+          done
+          echo "DOCKER_ARCH_TAGS=$ARCH_TAGS" >> $GITHUB_ENV
+          echo "✅ arm64 tags prepared: $ARCH_TAGS"
+
+      - name: Push Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
+          platforms: linux/arm64
+          push: true
+          sbom: true
+          provenance: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.DOCKER_ARCH_TAGS }}
+
+      - name: Log out
+        run: docker logout
+
+  manifest:
+    runs-on: ubuntu-24.04
+    needs: [config, github-release, build-amd64, build-arm64]
+    if: |
+      always() &&
+      success() &&
+      needs.config.outputs.docker_has_credentials == 'true' &&
+      needs.config.outputs.docker_has_publish_config == 'true' &&
+      needs.config.outputs.is_release_branch == 'true' &&
+      needs.build-amd64.result == 'success' &&
+      needs.build-arm64.result == 'success'
+    permissions:
+      contents: write
+    env:
+      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+      DOCKER_PASSWORD: ${{ secrets.docker_token }}
+      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Log in
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_LOGIN }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Prepare tags
+        run: |
+          echo "🔄 Preparing Docker Hub tags..."
+          # Keep existing release tag logic: semantic version + latest.
+          TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
+          echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "✅ Docker Hub tags prepared: $TAGS"
+
+      - name: Create Multi-Arch Manifest
+        run: |
+          # Manifest creation only combines native per-arch images, so no QEMU is required.
+          IFS=',' read -ra TAG_ARRAY <<< "${{ env.DOCKER_TAGS }}"
+          for tag in "${TAG_ARRAY[@]}"; do
+            echo "🔄 Creating multi-arch manifest for ${tag}"
+            docker buildx imagetools create \
+              --tag "${tag}" \
+              "${tag}-amd64" \
+              "${tag}-arm64"
+            docker buildx imagetools inspect "${tag}"
+          done
 
       - name: Log out
         run: docker logout
@@ -1164,7 +1292,7 @@ jobs:
       [
         config,
         github-release,
-        docker-hub-release,
+        manifest,
         google-cloud-release,
         azure-container-registry-release,
       ]
@@ -1172,7 +1300,7 @@ jobs:
       always() && 
       needs.config.outputs.has_slack_webhook == 'true' &&
       needs.github-release.result == 'success' &&
-      (needs.docker-hub-release.result == 'success' || needs.docker-hub-release.result == 'skipped') &&
+      (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') &&
       (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
       (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
       needs.config.outputs.is_release_branch == 'true'
