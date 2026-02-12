@@ -890,6 +890,15 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate image coordinates
+        id: validate_image
+        run: |
+          set -euo pipefail
+          # Keep Docker Hub coordinates strict to prevent unsafe injection into downstream commands.
+          [[ "${DOCKER_ORG}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid docker_org: ${DOCKER_ORG}"; exit 1; }
+          [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
+          echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
+
       - name: Push Image
         id: build
         uses: docker/build-push-action@v6
@@ -899,7 +908,8 @@ jobs:
           # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
           platforms: linux/amd64
           # Push by digest (no temp arch tags) so only final manifest tags are published.
-          outputs: type=image,name=${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ steps.validate_image.outputs.image_ref }}
           sbom: true
           provenance: true
           no-cache: true
@@ -907,10 +917,13 @@ jobs:
             ${{ env.BUILD_ARGS }}
 
       - name: Export digest
+        env:
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
+          set -euo pipefail
+          [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
           mkdir -p /tmp/digests
-          DIGEST="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${DIGEST#sha256:}"
+          touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v5
@@ -960,6 +973,15 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate image coordinates
+        id: validate_image
+        run: |
+          set -euo pipefail
+          # Keep Docker Hub coordinates strict to prevent unsafe injection into downstream commands.
+          [[ "${DOCKER_ORG}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid docker_org: ${DOCKER_ORG}"; exit 1; }
+          [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
+          echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
+
       - name: Push Image
         id: build
         uses: docker/build-push-action@v6
@@ -969,7 +991,8 @@ jobs:
           # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
           platforms: linux/arm64
           # Push by digest (no temp arch tags) so only final manifest tags are published.
-          outputs: type=image,name=${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ steps.validate_image.outputs.image_ref }}
           sbom: true
           provenance: true
           no-cache: true
@@ -977,10 +1000,13 @@ jobs:
             ${{ env.BUILD_ARGS }}
 
       - name: Export digest
+        env:
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
+          set -euo pipefail
+          [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
           mkdir -p /tmp/digests
-          DIGEST="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${DIGEST#sha256:}"
+          touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v5
@@ -1025,10 +1051,16 @@ jobs:
           password: ${{ env.DOCKER_PASSWORD }}
 
       - name: Prepare tags
+        env:
+          IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
+          RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
         run: |
+          set -euo pipefail
           echo "🔄 Preparing Docker Hub tags..."
+          [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
+          [[ "${RELEASE_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid release_version: ${RELEASE_VERSION}"; exit 1; }
           # Keep existing release tag logic: semantic version + latest.
-          TAGS="${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:${{ env.RELEASE_VERSION }},${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}:latest"
+          TAGS="${IMAGE_REF}:${RELEASE_VERSION},${IMAGE_REF}:latest"
           echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
           echo "✅ Docker Hub tags prepared: $TAGS"
 
@@ -1040,24 +1072,31 @@ jobs:
           merge-multiple: true
 
       - name: Create Multi-Arch Manifest
+        env:
+          IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
         run: |
+          set -euo pipefail
+          [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
           # Manifest creation only combines native per-arch digests, so no QEMU and no temp arch tags are required.
-          DIGEST_SOURCES=""
+          DIGEST_SOURCES=()
           for digest_file in /tmp/digests/*; do
             [ -e "${digest_file}" ] || continue
-            DIGEST_SOURCES="${DIGEST_SOURCES} ${{ env.DOCKER_ORG }}/${{ env.DOCKER_REPO }}@sha256:$(basename "${digest_file}")"
+            DIGEST_VALUE="$(basename "${digest_file}")"
+            [[ "${DIGEST_VALUE}" =~ ^[a-f0-9]{64}$ ]] || { echo "::error::Invalid digest artifact: ${DIGEST_VALUE}"; exit 1; }
+            DIGEST_SOURCES+=("${IMAGE_REF}@sha256:${DIGEST_VALUE}")
           done
-          if [ -z "${DIGEST_SOURCES}" ]; then
+          if [ ${#DIGEST_SOURCES[@]} -eq 0 ]; then
             echo "::error::No build digests found for manifest creation."
             exit 1
           fi
 
-          IFS=',' read -ra TAG_ARRAY <<< "${{ env.DOCKER_TAGS }}"
+          IFS=',' read -ra TAG_ARRAY <<< "${DOCKER_TAGS}"
           for tag in "${TAG_ARRAY[@]}"; do
+            [[ "${tag}" =~ ^[a-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid Docker tag: ${tag}"; exit 1; }
             echo "🔄 Creating multi-arch manifest for ${tag}"
             docker buildx imagetools create \
               --tag "${tag}" \
-              ${DIGEST_SOURCES}
+              "${DIGEST_SOURCES[@]}"
             docker buildx imagetools inspect "${tag}"
           done
 
