@@ -238,6 +238,7 @@ Generated metadata includes:
 - `commit_sha`
 - `version`
 - `artifact_type`
-- `bundle_url`
 - `checksum`
 - `build_timestamp`
+- `release_published`
+- `bundle_url` (included only when release publishing is enabled for the run)

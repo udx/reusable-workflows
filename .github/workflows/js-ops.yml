@@ -305,7 +305,7 @@ jobs:
             scan_cmd="npm run scan"
           else
             if [[ -f "${WD}/yarn.lock" ]]; then
-              install_cmd="corepack enable && yarn install --immutable || yarn install --frozen-lockfile || yarn install"
+              install_cmd="corepack enable && (yarn install --immutable || yarn install --frozen-lockfile || yarn install)"
             else
               install_cmd="corepack enable && yarn install"
             fi
@@ -451,6 +451,7 @@ jobs:
       APP_NAME: ${{ needs.config.outputs.app_name }}
       PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
       PACKAGE_VERSION: ${{ needs.config.outputs.package_version }}
+      RELEASE_PUBLISH_ENABLED: ${{ needs.config.outputs.is_release_branch }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -527,7 +528,11 @@ jobs:
           tar_path="${assets_dir}/${BUNDLE_FILE_NAME}"
           checksum_path="${assets_dir}/${CHECKSUM_FILE_NAME}"
           metadata_path="${assets_dir}/${METADATA_FILE_NAME}"
-          bundle_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/${BUNDLE_FILE_NAME}"
+          release_publish_enabled="${RELEASE_PUBLISH_ENABLED}"
+          bundle_url=""
+          if [[ "${release_publish_enabled}" == "true" ]]; then
+            bundle_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/${BUNDLE_FILE_NAME}"
+          fi
           build_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
           rm -rf "${staging_root}" "${assets_dir}"
@@ -553,6 +558,7 @@ jobs:
           export BUNDLE_URL="${bundle_url}"
           export BUNDLE_SHA256="${bundle_sha256}"
           export BUILD_TIMESTAMP="${build_timestamp}"
+          export RELEASE_PUBLISH_ENABLED="${release_publish_enabled}"
           export METADATA_PATH="${metadata_path}"
 
           node - <<'NODE'
@@ -565,10 +571,13 @@ jobs:
             commit_sha: process.env.GITHUB_SHA,
             version: process.env.VERSION,
             artifact_type: 'bundle',
-            bundle_url: process.env.BUNDLE_URL,
             checksum: process.env.BUNDLE_SHA256,
-            build_timestamp: process.env.BUILD_TIMESTAMP
+            build_timestamp: process.env.BUILD_TIMESTAMP,
+            release_published: process.env.RELEASE_PUBLISH_ENABLED === 'true'
           };
+          if (process.env.BUNDLE_URL) {
+            data.bundle_url = process.env.BUNDLE_URL;
+          }
           fs.writeFileSync(process.env.METADATA_PATH, JSON.stringify(data, null, 2) + '\n');
           NODE
 
