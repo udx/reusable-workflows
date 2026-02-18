@@ -109,9 +109,12 @@ jobs:
 
       - name: Validate inputs
         id: validate
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ inputs.working_directory }}
+          NODE_VERSION_INPUT: ${{ inputs.node_version }}
         run: |
-          wd="${{ inputs.working_directory }}"
-          node_version="${{ inputs.node_version }}"
+          wd="${WORKING_DIRECTORY_INPUT}"
+          node_version="${NODE_VERSION_INPUT}"
 
           echo "Validating js-ops inputs..."
           echo "input.working_directory='${wd}'"
@@ -140,13 +143,17 @@ jobs:
 
       - name: Determine Branch Information
         id: branches
+        env:
+          GITHUB_REF_NAME_INPUT: ${{ github.ref_name }}
+          RELEASE_BRANCH_INPUT: ${{ inputs.release_branch }}
+          GITHUB_REF_INPUT: ${{ github.ref }}
         run: |
-          branch_name="${{ github.ref_name }}"
-          release_branch="${{ inputs.release_branch }}"
+          branch_name="${GITHUB_REF_NAME_INPUT}"
+          release_branch="${RELEASE_BRANCH_INPUT}"
           is_release_branch="false"
 
           echo "Resolving release branch gate..."
-          echo "github.ref='${{ github.ref }}'"
+          echo "github.ref='${GITHUB_REF_INPUT}'"
           echo "resolved branch_name='${branch_name}'"
           echo "input.release_branch='${release_branch}'"
 
@@ -161,10 +168,14 @@ jobs:
 
       - name: Determine Concurrency Behavior
         id: concurrency
+        env:
+          BRANCH_NAME_INPUT: ${{ steps.branches.outputs.branch_name }}
+          CONCURRENCY_ENABLED_INPUT: ${{ inputs.concurrency_enabled }}
+          CONCURRENCY_CANCEL_IN_PROGRESS_INPUT: ${{ inputs.concurrency_cancel_in_progress }}
         run: |
-          branch_name="${{ steps.branches.outputs.branch_name }}"
-          concurrency_enabled="${{ inputs.concurrency_enabled }}"
-          concurrency_cancel_in_progress="${{ inputs.concurrency_cancel_in_progress }}"
+          branch_name="${BRANCH_NAME_INPUT}"
+          concurrency_enabled="${CONCURRENCY_ENABLED_INPUT}"
+          concurrency_cancel_in_progress="${CONCURRENCY_CANCEL_IN_PROGRESS_INPUT}"
           enabled_default_group="js-ops-${branch_name}"
 
           echo "Resolving build-and-scan job concurrency..."
