@@ -1,0 +1,740 @@
+---
+name: JS App Release Ops
+
+# Reusable workflow for immutable Next.js standalone bundle releases.
+# Supports npm/yarn, runs quality/security scripts when present in package.json,
+# optionally publishes release assets to GitHub, and emits release metadata.
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application name used for artifact names and release metadata."
+        required: false
+        default: ""
+        type: string
+      working_directory:
+        description: "Directory containing package.json."
+        required: false
+        default: "."
+        type: string
+      node_version:
+        description: "Node.js version used for install/build steps."
+        required: false
+        default: "24"
+        type: string
+      package_manager:
+        description: "Package manager to use: npm or yarn. If empty, workflow auto-detects."
+        required: false
+        default: ""
+        type: string
+      release_branch:
+        description: "Branch name that triggers GitHub Release publishing. Set empty to disable publishing."
+        required: false
+        default: "latest"
+        type: string
+      concurrency_enabled:
+        description: "Enable build-and-scan job concurrency control."
+        required: false
+        default: true
+        type: boolean
+      concurrency_cancel_in_progress:
+        description: "Cancel in-progress runs for the same concurrency group."
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      gh_token:
+        description: "Optional GitHub token override for release publishing."
+        required: false
+    outputs:
+      version:
+        description: "Release version (from package.json version)."
+        value: ${{ jobs.config.outputs.version }}
+      artifact_type:
+        description: "Artifact type produced by this workflow."
+        value: ${{ jobs.config.outputs.artifact_type }}
+      bundle_artifact_name:
+        description: "Bundle artifact name."
+        value: ${{ jobs.config.outputs.bundle_artifact_name }}
+      bundle_sha256:
+        description: "SHA-256 checksum of bundle tar.gz."
+        value: ${{ jobs.build-and-scan.outputs.bundle_sha256 }}
+      release_metadata_artifact:
+        description: "Artifact name containing release.json."
+        value: ${{ jobs.config.outputs.release_metadata_artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: Resolve Config
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.pkg.outputs.package_version }}
+      artifact_type: ${{ steps.meta.outputs.artifact_type }}
+      bundle_artifact_name: ${{ steps.meta.outputs.bundle_artifact_name }}
+      release_metadata_artifact: ${{ steps.meta.outputs.release_metadata_artifact }}
+      release_assets_artifact: ${{ steps.meta.outputs.release_assets_artifact }}
+      bundle_file_name: ${{ steps.meta.outputs.bundle_file_name }}
+      checksum_file_name: ${{ steps.meta.outputs.checksum_file_name }}
+      metadata_file_name: ${{ steps.meta.outputs.metadata_file_name }}
+      install_cmd: ${{ steps.commands.outputs.install_cmd }}
+      build_cmd: ${{ steps.commands.outputs.build_cmd }}
+      lint_cmd: ${{ steps.commands.outputs.lint_cmd }}
+      typecheck_cmd: ${{ steps.commands.outputs.typecheck_cmd }}
+      test_cmd: ${{ steps.commands.outputs.test_cmd }}
+      scan_cmd: ${{ steps.commands.outputs.scan_cmd }}
+      has_lint: ${{ steps.pkg.outputs.has_lint }}
+      has_typecheck: ${{ steps.pkg.outputs.has_typecheck }}
+      has_test: ${{ steps.pkg.outputs.has_test }}
+      has_scan: ${{ steps.pkg.outputs.has_scan }}
+      package_name: ${{ steps.pkg.outputs.package_name }}
+      package_version: ${{ steps.pkg.outputs.package_version }}
+      app_name: ${{ steps.pkg.outputs.app_name }}
+      node_version: ${{ steps.validate.outputs.node_version }}
+      working_directory: ${{ steps.validate.outputs.working_directory }}
+      package_manager: ${{ steps.pkg.outputs.package_manager }}
+      current_branch: ${{ steps.branches.outputs.branch_name }}
+      release_branch: ${{ steps.branches.outputs.release_branch }}
+      is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
+      concurrency_enabled: ${{ steps.concurrency.outputs.concurrency_enabled }}
+      concurrency_cancel_in_progress: ${{ steps.concurrency.outputs.concurrency_cancel_in_progress }}
+      resolved_concurrency_group: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
+      resolved_cancel_in_progress: ${{ steps.concurrency.outputs.resolved_cancel_in_progress }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Validate inputs
+        id: validate
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ inputs.working_directory }}
+          NODE_VERSION_INPUT: ${{ inputs.node_version }}
+        run: |
+          wd="${WORKING_DIRECTORY_INPUT}"
+          node_version="${NODE_VERSION_INPUT}"
+
+          echo "Validating js-ops inputs..."
+          echo "input.working_directory='${wd}'"
+          echo "input.node_version='${node_version}'"
+
+          if [[ -z "${wd}" ]]; then
+            wd="."
+            echo "working_directory empty; defaulting to '.'"
+          fi
+
+          if [[ ! -d "${wd}" ]]; then
+            echo "::error::working_directory does not exist: ${wd}"
+            exit 1
+          fi
+          echo "working_directory exists: ${wd}"
+
+          if [[ ! -f "${wd}/package.json" ]]; then
+            echo "::error::package.json not found in working_directory: ${wd}"
+            exit 1
+          fi
+          echo "package.json found: ${wd}/package.json"
+
+          echo "node_version=${node_version}" >> "${GITHUB_OUTPUT}"
+          echo "working_directory=${wd}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved outputs: node_version='${node_version}', working_directory='${wd}'"
+
+      - name: Determine Branch Information
+        id: branches
+        env:
+          GITHUB_REF_NAME_INPUT: ${{ github.ref_name }}
+          RELEASE_BRANCH_INPUT: ${{ inputs.release_branch }}
+          GITHUB_REF_INPUT: ${{ github.ref }}
+        run: |
+          branch_name="${GITHUB_REF_NAME_INPUT}"
+          release_branch="${RELEASE_BRANCH_INPUT}"
+          is_release_branch="false"
+
+          echo "Resolving release branch gate..."
+          echo "github.ref='${GITHUB_REF_INPUT}'"
+          echo "resolved branch_name='${branch_name}'"
+          echo "input.release_branch='${release_branch}'"
+
+          if [[ -n "${release_branch}" && "${branch_name}" == "${release_branch}" ]]; then
+            is_release_branch="true"
+          fi
+
+          echo "branch_name=${branch_name}" >> "${GITHUB_OUTPUT}"
+          echo "release_branch=${release_branch}" >> "${GITHUB_OUTPUT}"
+          echo "is_release_branch=${is_release_branch}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved outputs: branch_name='${branch_name}', release_branch='${release_branch}', is_release_branch='${is_release_branch}'"
+
+      - name: Determine Concurrency Behavior
+        id: concurrency
+        env:
+          BRANCH_NAME_INPUT: ${{ steps.branches.outputs.branch_name }}
+          CONCURRENCY_ENABLED_INPUT: ${{ inputs.concurrency_enabled }}
+          CONCURRENCY_CANCEL_IN_PROGRESS_INPUT: ${{ inputs.concurrency_cancel_in_progress }}
+        run: |
+          branch_name="${BRANCH_NAME_INPUT}"
+          concurrency_enabled="${CONCURRENCY_ENABLED_INPUT}"
+          concurrency_cancel_in_progress="${CONCURRENCY_CANCEL_IN_PROGRESS_INPUT}"
+          enabled_default_group="js-ops-${branch_name}"
+
+          echo "Resolving build-and-scan job concurrency..."
+          echo "resolved branch_name='${branch_name}'"
+          echo "input.concurrency_enabled='${concurrency_enabled}'"
+          echo "input.concurrency_cancel_in_progress='${concurrency_cancel_in_progress}'"
+          echo "resolved default group template='js-ops-${branch_name}'"
+
+          resolved_enabled_group="${enabled_default_group}"
+
+          if [[ "${concurrency_enabled}" == "true" ]]; then
+            resolved_concurrency_group="${resolved_enabled_group}"
+            resolved_cancel_in_progress="${concurrency_cancel_in_progress}"
+          else
+            resolved_concurrency_group="js-ops-no-concurrency-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            resolved_cancel_in_progress="false"
+          fi
+
+          echo "concurrency_enabled=${concurrency_enabled}" >> "${GITHUB_OUTPUT}"
+          echo "concurrency_cancel_in_progress=${concurrency_cancel_in_progress}" >> "${GITHUB_OUTPUT}"
+          echo "resolved_concurrency_group=${resolved_concurrency_group}" >> "${GITHUB_OUTPUT}"
+          echo "resolved_cancel_in_progress=${resolved_cancel_in_progress}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved outputs: concurrency_enabled='${concurrency_enabled}', concurrency_cancel_in_progress='${concurrency_cancel_in_progress}', resolved_concurrency_group='${resolved_concurrency_group}', resolved_cancel_in_progress='${resolved_cancel_in_progress}'"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.validate.outputs.node_version }}
+
+      - name: Report runtime versions
+        run: |
+          echo "Runtime versions after setup-node:"
+          echo "node: $(node --version)"
+          echo "npm: $(npm --version)"
+          if command -v yarn >/dev/null 2>&1; then
+            echo "yarn: $(yarn --version)"
+          else
+            echo "yarn: not available before install (expected when using Corepack)"
+          fi
+
+      - name: Read package metadata and scripts
+        id: pkg
+        working-directory: ${{ steps.validate.outputs.working_directory }}
+        env:
+          INPUT_PACKAGE_MANAGER: ${{ inputs.package_manager }}
+          INPUT_APP_NAME: ${{ inputs.app_name }}
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const outputPath = process.env.GITHUB_OUTPUT;
+          const emit = (key, value) => fs.appendFileSync(outputPath, `${key}=${value}\n`);
+
+          console.log('Reading package metadata and script availability...');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const scripts = pkg.scripts || {};
+
+          if (!pkg.name || !pkg.version) {
+            console.error('package.json must contain both "name" and "version" fields.');
+            process.exit(1);
+          }
+          if (!scripts.build) {
+            console.error('package.json scripts.build is required.');
+            process.exit(1);
+          }
+
+          const inputPm = (process.env.INPUT_PACKAGE_MANAGER || '').trim();
+          const inputAppName = (process.env.INPUT_APP_NAME || '').trim();
+          const pkgPm = (pkg.packageManager || '').trim();
+          const hasYarnLock = fs.existsSync('yarn.lock');
+          const hasNpmLock = fs.existsSync('package-lock.json') || fs.existsSync('npm-shrinkwrap.json');
+          let packageManager = 'npm';
+
+          if (inputPm) {
+            if (inputPm !== 'npm' && inputPm !== 'yarn') {
+              console.error('package_manager must be one of: npm, yarn');
+              process.exit(1);
+            }
+            packageManager = inputPm;
+          } else if (pkgPm.startsWith('yarn@')) {
+            packageManager = 'yarn';
+          } else if (pkgPm.startsWith('npm@')) {
+            packageManager = 'npm';
+          } else if (hasYarnLock && !hasNpmLock) {
+            packageManager = 'yarn';
+          }
+
+          const rawAppName = inputAppName || pkg.name;
+          const appName = rawAppName
+            .replace(/^@/, '')
+            .replace(/\//g, '-')
+            .replace(/[^a-zA-Z0-9._-]/g, '-');
+
+          const names = ['lint', 'typecheck', 'test', 'scan', 'build'];
+          emit('app_name', appName);
+          emit('package_manager', packageManager);
+          emit('package_name', pkg.name);
+          emit('package_version', pkg.version);
+          for (const name of names) {
+            emit(`has_${name}`, scripts[name] ? 'true' : 'false');
+          }
+
+          console.log(`Resolved package_name='${pkg.name}'`);
+          console.log(`Resolved package_version='${pkg.version}'`);
+          console.log(`Resolved app_name='${appName}'`);
+          console.log(`Resolved package_manager='${packageManager}'`);
+          for (const name of names) {
+            console.log(`script.${name}=${scripts[name] ? 'present' : 'missing'}`);
+          }
+          NODE
+
+      - name: Resolve package-manager commands
+        id: commands
+        env:
+          PM: ${{ steps.pkg.outputs.package_manager }}
+          WD: ${{ steps.validate.outputs.working_directory }}
+        run: |
+          if [[ "${PM}" == "npm" ]]; then
+            if [[ -f "${WD}/package-lock.json" || -f "${WD}/npm-shrinkwrap.json" ]]; then
+              install_cmd="npm ci"
+            else
+              install_cmd="npm install"
+            fi
+            build_cmd="npm run build"
+            lint_cmd="npm run lint"
+            typecheck_cmd="npm run typecheck"
+            test_cmd="npm run test"
+            scan_cmd="npm run scan"
+          else
+            if [[ -f "${WD}/yarn.lock" ]]; then
+              install_cmd="corepack enable && (yarn install --immutable || yarn install --frozen-lockfile || yarn install)"
+            else
+              install_cmd="corepack enable && yarn install"
+            fi
+            build_cmd="yarn build"
+            lint_cmd="yarn lint"
+            typecheck_cmd="yarn typecheck"
+            test_cmd="yarn test"
+            scan_cmd="yarn scan"
+          fi
+
+          echo "Resolving command set for package_manager='${PM}'..."
+          echo "Resolved install_cmd='${install_cmd}'"
+          echo "Resolved build_cmd='${build_cmd}'"
+          echo "Resolved lint_cmd='${lint_cmd}'"
+          echo "Resolved typecheck_cmd='${typecheck_cmd}'"
+          echo "Resolved test_cmd='${test_cmd}'"
+          echo "Resolved scan_cmd='${scan_cmd}'"
+
+          echo "install_cmd=${install_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "build_cmd=${build_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "lint_cmd=${lint_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "typecheck_cmd=${typecheck_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "test_cmd=${test_cmd}" >> "${GITHUB_OUTPUT}"
+          echo "scan_cmd=${scan_cmd}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build artifact metadata
+        id: meta
+        env:
+          APP_NAME: ${{ steps.pkg.outputs.app_name }}
+          VERSION: ${{ steps.pkg.outputs.package_version }}
+        run: |
+          bundle_artifact_name="${APP_NAME}-${VERSION}-bundle"
+          release_metadata_artifact="${APP_NAME}-${VERSION}-release-metadata"
+          release_assets_artifact="${APP_NAME}-${VERSION}-release-assets"
+          bundle_file_name="${bundle_artifact_name}.tar.gz"
+          checksum_file_name="${bundle_file_name}.sha256"
+          metadata_file_name="release.json"
+
+          echo "Building artifact metadata..."
+          echo "Resolved bundle_artifact_name='${bundle_artifact_name}'"
+          echo "Resolved release_metadata_artifact='${release_metadata_artifact}'"
+          echo "Resolved release_assets_artifact='${release_assets_artifact}'"
+          echo "Resolved bundle_file_name='${bundle_file_name}'"
+          echo "Resolved checksum_file_name='${checksum_file_name}'"
+          echo "Resolved metadata_file_name='${metadata_file_name}'"
+
+          echo "bundle_artifact_name=${bundle_artifact_name}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_type=bundle" >> "${GITHUB_OUTPUT}"
+          echo "release_metadata_artifact=${release_metadata_artifact}" >> "${GITHUB_OUTPUT}"
+          echo "release_assets_artifact=${release_assets_artifact}" >> "${GITHUB_OUTPUT}"
+          echo "bundle_file_name=${bundle_file_name}" >> "${GITHUB_OUTPUT}"
+          echo "checksum_file_name=${checksum_file_name}" >> "${GITHUB_OUTPUT}"
+          echo "metadata_file_name=${metadata_file_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Config summary
+        env:
+          APP_NAME: ${{ steps.pkg.outputs.app_name }}
+          PACKAGE_MANAGER: ${{ steps.pkg.outputs.package_manager }}
+          NODE_VERSION: ${{ steps.validate.outputs.node_version }}
+          PKG_NAME: ${{ steps.pkg.outputs.package_name }}
+          PKG_VERSION: ${{ steps.pkg.outputs.package_version }}
+          HAS_LINT: ${{ steps.pkg.outputs.has_lint }}
+          HAS_TYPECHECK: ${{ steps.pkg.outputs.has_typecheck }}
+          HAS_TEST: ${{ steps.pkg.outputs.has_test }}
+          HAS_SCAN: ${{ steps.pkg.outputs.has_scan }}
+          CURRENT_BRANCH: ${{ steps.branches.outputs.branch_name }}
+          RELEASE_BRANCH: ${{ steps.branches.outputs.release_branch }}
+          IS_RELEASE_BRANCH: ${{ steps.branches.outputs.is_release_branch }}
+          CONCURRENCY_ENABLED: ${{ steps.concurrency.outputs.concurrency_enabled }}
+          RESOLVED_CONCURRENCY_GROUP: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
+          RESOLVED_CANCEL_IN_PROGRESS: ${{ steps.concurrency.outputs.resolved_cancel_in_progress }}
+          BUNDLE_ARTIFACT_NAME: ${{ steps.meta.outputs.bundle_artifact_name }}
+        run: |
+          release_decision="skip"
+          if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
+            release_decision="run"
+          fi
+
+          enabled_checks=()
+          [[ "${HAS_LINT}" == "true" ]] && enabled_checks+=("lint")
+          [[ "${HAS_TYPECHECK}" == "true" ]] && enabled_checks+=("typecheck")
+          [[ "${HAS_TEST}" == "true" ]] && enabled_checks+=("test")
+          [[ "${HAS_SCAN}" == "true" ]] && enabled_checks+=("scan")
+          if [[ ${#enabled_checks[@]} -eq 0 ]]; then
+            checks_display="none"
+          else
+            checks_display="$(printf '%s, ' "${enabled_checks[@]}")"
+            checks_display="${checks_display%, }"
+          fi
+
+          release_status="⏭️ skipped"
+          if [[ "${release_decision}" == "run" ]]; then
+            release_status="🚀 enabled"
+          fi
+
+          concurrency_status="✅ enabled"
+          if [[ "${CONCURRENCY_ENABLED}" != "true" ]]; then
+            concurrency_status="⏭️ disabled"
+          fi
+
+          {
+            echo "## JS Ops Configuration"
+            echo ""
+            echo "- app: ${APP_NAME}"
+            echo "- package: ${PKG_NAME}@${PKG_VERSION}"
+            echo "- node version: ${NODE_VERSION}"
+            echo "- package manager: ${PACKAGE_MANAGER}"
+            echo "- checks to run: ${checks_display}"
+            echo "- current branch: ${CURRENT_BRANCH}"
+            echo "- release branch: ${RELEASE_BRANCH}"
+            echo "- github-release: ${release_status}"
+            echo "- concurrency: ${concurrency_status}"
+            echo "- concurrency group: ${RESOLVED_CONCURRENCY_GROUP}"
+            echo "- concurrency cancel in progress: ${RESOLVED_CANCEL_IN_PROGRESS}"
+            echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  build-and-scan:
+    name: Build and Scan
+    runs-on: ubuntu-24.04
+    needs: config
+    permissions:
+      contents: read
+    concurrency:
+      group: ${{ needs.config.outputs.resolved_concurrency_group }}
+      cancel-in-progress: ${{ needs.config.outputs.resolved_cancel_in_progress == 'true' }}
+    outputs:
+      bundle_sha256: ${{ steps.bundle.outputs.bundle_sha256 }}
+    env:
+      VERSION: ${{ needs.config.outputs.version }}
+      BUNDLE_ARTIFACT_NAME: ${{ needs.config.outputs.bundle_artifact_name }}
+      RELEASE_METADATA_ARTIFACT: ${{ needs.config.outputs.release_metadata_artifact }}
+      RELEASE_ASSETS_ARTIFACT: ${{ needs.config.outputs.release_assets_artifact }}
+      BUNDLE_FILE_NAME: ${{ needs.config.outputs.bundle_file_name }}
+      CHECKSUM_FILE_NAME: ${{ needs.config.outputs.checksum_file_name }}
+      METADATA_FILE_NAME: ${{ needs.config.outputs.metadata_file_name }}
+      INSTALL_CMD: ${{ needs.config.outputs.install_cmd }}
+      BUILD_CMD: ${{ needs.config.outputs.build_cmd }}
+      LINT_CMD: ${{ needs.config.outputs.lint_cmd }}
+      TYPECHECK_CMD: ${{ needs.config.outputs.typecheck_cmd }}
+      TEST_CMD: ${{ needs.config.outputs.test_cmd }}
+      SCAN_CMD: ${{ needs.config.outputs.scan_cmd }}
+      APP_NAME: ${{ needs.config.outputs.app_name }}
+      PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
+      PACKAGE_VERSION: ${{ needs.config.outputs.package_version }}
+      RELEASE_PUBLISH_ENABLED: ${{ needs.config.outputs.is_release_branch }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ needs.config.outputs.node_version }}
+          cache: ${{ needs.config.outputs.package_manager }}
+          cache-dependency-path: |
+            ${{ needs.config.outputs.working_directory }}/package-lock.json
+            ${{ needs.config.outputs.working_directory }}/npm-shrinkwrap.json
+            ${{ needs.config.outputs.working_directory }}/yarn.lock
+
+      - name: Install dependencies
+        id: install
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${INSTALL_CMD}"
+
+      - name: Run lint
+        id: lint
+        if: ${{ needs.config.outputs.has_lint == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${LINT_CMD}"
+
+      - name: Run typecheck
+        id: typecheck
+        if: ${{ needs.config.outputs.has_typecheck == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${TYPECHECK_CMD}"
+
+      - name: Run test
+        id: test
+        if: ${{ needs.config.outputs.has_test == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${TEST_CMD}"
+
+      - name: Run scan
+        id: scan
+        if: ${{ needs.config.outputs.has_scan == 'true' }}
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${SCAN_CMD}"
+
+      - name: Build app
+        id: build
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        env:
+          NODE_ENV: production
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${BUILD_CMD}"
+
+      - name: Package bundle
+        id: bundle
+        working-directory: ${{ needs.config.outputs.working_directory }}
+        run: |
+          if [[ ! -d ".next/standalone" ]]; then
+            echo "::error::.next/standalone not found. Configure Next.js output: 'standalone'."
+            exit 1
+          fi
+
+          staging_root="${RUNNER_TEMP}/${APP_NAME}-${VERSION}"
+          assets_dir="${RUNNER_TEMP}/release-assets"
+          tar_path="${assets_dir}/${BUNDLE_FILE_NAME}"
+          checksum_path="${assets_dir}/${CHECKSUM_FILE_NAME}"
+          metadata_path="${assets_dir}/${METADATA_FILE_NAME}"
+          release_publish_enabled="${RELEASE_PUBLISH_ENABLED}"
+          bundle_url=""
+          if [[ "${release_publish_enabled}" == "true" ]]; then
+            bundle_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/${BUNDLE_FILE_NAME}"
+          fi
+          build_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          rm -rf "${staging_root}" "${assets_dir}"
+          mkdir -p "${staging_root}" "${assets_dir}"
+
+          cp -R .next/standalone/. "${staging_root}/"
+          mkdir -p "${staging_root}/.next"
+          if [[ -d ".next/static" ]]; then
+            cp -R ".next/static" "${staging_root}/.next/static"
+          fi
+          if [[ -d "public" ]]; then
+            cp -R "public" "${staging_root}/public"
+          fi
+
+          tar -C "${RUNNER_TEMP}" -czf "${tar_path}" "$(basename "${staging_root}")"
+          bundle_sha256="$(sha256sum "${tar_path}" | awk '{print $1}')"
+          printf '%s  %s\n' "${bundle_sha256}" "${BUNDLE_FILE_NAME}" > "${checksum_path}"
+
+          export APP_NAME
+          export VERSION
+          export PACKAGE_NAME
+          export PACKAGE_VERSION
+          export BUNDLE_URL="${bundle_url}"
+          export BUNDLE_SHA256="${bundle_sha256}"
+          export BUILD_TIMESTAMP="${build_timestamp}"
+          export RELEASE_PUBLISH_ENABLED="${release_publish_enabled}"
+          export METADATA_PATH="${metadata_path}"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = {
+            app: process.env.APP_NAME,
+            package_name: process.env.PACKAGE_NAME,
+            package_version: process.env.PACKAGE_VERSION,
+            repo: process.env.GITHUB_REPOSITORY,
+            commit_sha: process.env.GITHUB_SHA,
+            version: process.env.VERSION,
+            artifact_type: 'bundle',
+            checksum: process.env.BUNDLE_SHA256,
+            build_timestamp: process.env.BUILD_TIMESTAMP,
+            release_published: process.env.RELEASE_PUBLISH_ENABLED === 'true'
+          };
+          if (process.env.BUNDLE_URL) {
+            data.bundle_url = process.env.BUNDLE_URL;
+          }
+          fs.writeFileSync(process.env.METADATA_PATH, JSON.stringify(data, null, 2) + '\n');
+          NODE
+
+          echo "bundle_sha256=${bundle_sha256}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release-assets/${{ env.BUNDLE_FILE_NAME }}
+            ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
+
+      - name: Upload release metadata artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.RELEASE_METADATA_ARTIFACT }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
+
+      - name: Upload release assets artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.RELEASE_ASSETS_ARTIFACT }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release-assets/${{ env.BUNDLE_FILE_NAME }}
+            ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
+            ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
+
+      - name: Build-and-scan summary
+        if: ${{ always() }}
+        env:
+          JOB_STATUS: ${{ job.status }}
+          HAS_LINT: ${{ needs.config.outputs.has_lint }}
+          HAS_TYPECHECK: ${{ needs.config.outputs.has_typecheck }}
+          HAS_TEST: ${{ needs.config.outputs.has_test }}
+          HAS_SCAN: ${{ needs.config.outputs.has_scan }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
+          BUNDLE_SHA256: ${{ steps.bundle.outputs.bundle_sha256 }}
+          BUNDLE_ARTIFACT_NAME: ${{ env.BUNDLE_ARTIFACT_NAME }}
+          BUNDLE_FILE_NAME: ${{ env.BUNDLE_FILE_NAME }}
+          VERSION: ${{ env.VERSION }}
+          RELEASE_JOB_ENABLED: ${{ needs.config.outputs.is_release_branch }}
+          CONCURRENCY_GROUP: ${{ needs.config.outputs.resolved_concurrency_group }}
+          CONCURRENCY_CANCEL_IN_PROGRESS: ${{ needs.config.outputs.resolved_cancel_in_progress }}
+        run: |
+          status_icon() {
+            case "$1" in
+              success) echo "✅ passed" ;;
+              failure) echo "❌ failed" ;;
+              skipped) echo "⏭️ skipped" ;;
+              cancelled) echo "🛑 cancelled" ;;
+              *) echo "❔ unknown" ;;
+            esac
+          }
+
+          optional_check_status() {
+            local enabled="$1"
+            local outcome="$2"
+            if [[ "${enabled}" != "true" ]]; then
+              echo "⚪ not configured"
+              return
+            fi
+            status_icon "${outcome}"
+          }
+
+          overall_status="$(status_icon "${JOB_STATUS}")"
+          install_status="$(status_icon "${INSTALL_OUTCOME}")"
+          lint_status="$(optional_check_status "${HAS_LINT}" "${LINT_OUTCOME}")"
+          typecheck_status="$(optional_check_status "${HAS_TYPECHECK}" "${TYPECHECK_OUTCOME}")"
+          test_status="$(optional_check_status "${HAS_TEST}" "${TEST_OUTCOME}")"
+          scan_status="$(optional_check_status "${HAS_SCAN}" "${SCAN_OUTCOME}")"
+          build_status="$(status_icon "${BUILD_OUTCOME}")"
+          package_status="$(status_icon "${BUNDLE_OUTCOME}")"
+
+          if [[ "${RELEASE_JOB_ENABLED}" == "true" ]]; then
+            release_job_status="🚀 will run"
+          else
+            release_job_status="⏭️ skipped"
+          fi
+
+          bundle_sha256_display="${BUNDLE_SHA256:-n/a}"
+
+          {
+            echo "## JS Ops Build and Scan"
+            echo ""
+            echo "- overall result: ${overall_status}"
+            echo "- version: ${VERSION}"
+            echo "- install dependencies: ${install_status}"
+            echo "- lint: ${lint_status}"
+            echo "- typecheck: ${typecheck_status}"
+            echo "- test: ${test_status}"
+            echo "- scan: ${scan_status}"
+            echo "- build app: ${build_status}"
+            echo "- package bundle: ${package_status}"
+            echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
+            echo "- bundle file: ${BUNDLE_FILE_NAME}"
+            echo "- bundle sha256: ${bundle_sha256_display}"
+            echo "- github-release: ${release_job_status}"
+            echo "- concurrency group: ${CONCURRENCY_GROUP}"
+            echo "- concurrency cancel in progress: ${CONCURRENCY_CANCEL_IN_PROGRESS}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-24.04
+    needs: [config, build-and-scan]
+    if: |
+      always() &&
+      success() &&
+      needs.config.outputs.is_release_branch == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download release assets
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ needs.config.outputs.release_assets_artifact }}
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.config.outputs.version }}
+          name: ${{ needs.config.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(needs.config.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            ${{ runner.temp }}/release-assets/${{ needs.config.outputs.bundle_file_name }}
+            ${{ runner.temp }}/release-assets/${{ needs.config.outputs.checksum_file_name }}
+            ${{ runner.temp }}/release-assets/${{ needs.config.outputs.metadata_file_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.gh_token != '' && secrets.gh_token || github.token }}
+
+      - name: GitHub-release summary
+        env:
+          VERSION: ${{ needs.config.outputs.version }}
+          BUNDLE_FILE_NAME: ${{ needs.config.outputs.bundle_file_name }}
+          CHECKSUM_FILE_NAME: ${{ needs.config.outputs.checksum_file_name }}
+          METADATA_FILE_NAME: ${{ needs.config.outputs.metadata_file_name }}
+        run: |
+          {
+            echo "## JS Ops GitHub Release"
+            echo ""
+            echo "- release status: 🚀 published"
+            echo "- tag: ${VERSION}"
+            echo "- published files: ${BUNDLE_FILE_NAME}, ${CHECKSUM_FILE_NAME}, ${METADATA_FILE_NAME}"
+          } >> "${GITHUB_STEP_SUMMARY}"

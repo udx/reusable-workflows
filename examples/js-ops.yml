@@ -1,0 +1,50 @@
+name: JS Ops Example
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  # ===========================================================================
+  # Default Inputs: defaults-only
+  # USE CASE: Minimal caller config (template defaults apply)
+  # ===========================================================================
+  defaults-only:
+    permissions:
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+
+  # ===========================================================================
+  # Full Inputs + Release Branch: full-inputs-release-branch
+  # USE CASE: Explicit config with release publishing only on `release` branch
+  # ===========================================================================
+  full-inputs-release-branch:
+    permissions:
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      app_name: web-app
+      working_directory: apps/web
+      node_version: "24"
+      package_manager: yarn
+      release_branch: release
+      concurrency_cancel_in_progress: false
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+
+  # ===========================================================================
+  # Verify Only + Concurrency Disabled: verify-no-concurrency
+  # USE CASE: Always run checks/artifacts, never publish release, no queue/cancel
+  # ===========================================================================
+  verify-no-concurrency:
+    permissions:
+      contents: read
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
+      concurrency_enabled: false
+
+# Full Documentation:
+#   - See docs/workflows/js-ops.md for complete setup guides, examples, and behavior details
