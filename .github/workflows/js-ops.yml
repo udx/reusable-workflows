@@ -468,38 +468,50 @@ jobs:
       - name: Install dependencies
         id: install
         working-directory: ${{ needs.config.outputs.working_directory }}
-        run: ${{ env.INSTALL_CMD }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${INSTALL_CMD}"
 
       - name: Run lint
         id: lint
         if: ${{ needs.config.outputs.has_lint == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
-        run: ${{ env.LINT_CMD }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${LINT_CMD}"
 
       - name: Run typecheck
         id: typecheck
         if: ${{ needs.config.outputs.has_typecheck == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
-        run: ${{ env.TYPECHECK_CMD }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${TYPECHECK_CMD}"
 
       - name: Run test
         id: test
         if: ${{ needs.config.outputs.has_test == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
-        run: ${{ env.TEST_CMD }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${TEST_CMD}"
 
       - name: Run scan
         id: scan
         if: ${{ needs.config.outputs.has_scan == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
-        run: ${{ env.SCAN_CMD }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${SCAN_CMD}"
 
       - name: Build app
         id: build
         working-directory: ${{ needs.config.outputs.working_directory }}
         env:
           NODE_ENV: production
-        run: ${{ env.BUILD_CMD }}
+        run: |
+          set -euo pipefail
+          bash -eo pipefail -c "${BUILD_CMD}"
 
       - name: Package bundle
         id: bundle
