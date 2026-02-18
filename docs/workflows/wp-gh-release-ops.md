@@ -49,6 +49,8 @@ jobs:
 | `version`                 | Plugin version                     | latest version from readme.txt |                |
 | `prerelease`              | Pre-release version                | -                              |               |
 
+Input naming note: the reusable workflow input is `tag` (not `tag-name`).
+
 ## Versioning
 
 1. If `version` is specified, this version is used to parse changes.md for **Release Notes**

@@ -40,7 +40,7 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 
 | Input               | Description                                      | Default  |
 | ------------------- | ------------------------------------------------ | -------- |
-| `node_version`      | Node.js: Version to use                          | `22`     |
+| `node_version`      | Node.js: Version to use                          | `24`     |
 | `provenance`        | NPM: Enable provenance                           | `true`   |
 | `release_branch`    | Branch: Deployment branch that triggers releases | `latest` |
 | `enable_gh_release` | GitHub: Whether to create a GitHub release       | `true`   |

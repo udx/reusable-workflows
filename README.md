@@ -12,6 +12,16 @@ Production-ready GitHub Actions workflows for CI/CD. Self-contained, configurabl
 
 **💡 Pro Tip:** Start from the examples in `examples/` and tailor inputs/secrets using the docs.
 
+## Reusable Caller Essentials
+
+When calling any reusable workflow, use the caller patterns in [`docs/README.md`](docs/README.md):
+
+- Set permissions in the caller job (`contents`, `packages`, `id-token`) using least privilege.
+- Use clear `workflow_call` input names (prefer `lower_snake_case`, for example `deploy_environment`).
+- Prefer trigger filters and workflow inputs (for example `release_branch`) over complex job-level `if:` gates.
+- Pass secrets via `jobs.<id>.secrets` mapping (for example `gh_token: ${{ secrets.GH_TOKEN }}`).
+- Consume outputs with `needs.<job_id>.outputs.<output_name>`.
+
 ## Available Workflows
 
 | Workflow                                                         | Description                                                                                                          | Docs                                           | Example                                      |
