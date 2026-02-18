@@ -33,7 +33,7 @@ jobs:
 - Detects available optional scripts (`lint`, `typecheck`, `test`, `scan`)
 - Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
 - Resolves concurrency behavior (`concurrency_enabled`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
-- Emits detailed configuration trace logs (resolved inputs, commands, artifacts, and release decision) for debugging
+- Emits concise config notice + summary with high-signal values (app/version/branch/release decision/checks/concurrency/artifact)
 - Uses `package.json` version as release version/tag
 - Emits configuration summary in the job summary
 
@@ -47,6 +47,7 @@ jobs:
 - Produces SHA-256 checksum
 - Generates `release.json`
 - Uploads bundle + metadata artifacts
+- Emits build-and-scan notice + summary (version, artifact, checksum, release decision, concurrency)
 
 ### `github-release`
 
@@ -56,6 +57,7 @@ jobs:
   - bundle archive
   - checksum file
   - `release.json`
+- Emits release notice + summary with published tag/files
 
 `config` and `build-and-scan` always run. Bundle packaging and metadata generation happen regardless of whether publishing is enabled.
 
@@ -172,7 +174,7 @@ jobs:
 
 By default, `js-ops` applies concurrency on the `build-and-scan` job with:
 
-- group: `js-ops-${{ github.workflow }}-${{ github.ref }}`
+- group: `js-ops-${current_branch}` (derived from config branch resolution)
 - cancel-in-progress: `true`
 
 When `concurrency_enabled: false`, job concurrency is effectively disabled by assigning a per-run unique group and forcing `cancel-in-progress: false`.

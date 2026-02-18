@@ -141,12 +141,12 @@ jobs:
       - name: Determine Branch Information
         id: branches
         run: |
-          branch_name="${GITHUB_REF#refs/heads/}"
+          branch_name="${{ github.ref_name }}"
           release_branch="${{ inputs.release_branch }}"
           is_release_branch="false"
 
           echo "Resolving release branch gate..."
-          echo "github.ref='${GITHUB_REF}'"
+          echo "github.ref='${{ github.ref }}'"
           echo "resolved branch_name='${branch_name}'"
           echo "input.release_branch='${release_branch}'"
 
@@ -162,14 +162,16 @@ jobs:
       - name: Determine Concurrency Behavior
         id: concurrency
         run: |
+          branch_name="${{ steps.branches.outputs.branch_name }}"
           concurrency_enabled="${{ inputs.concurrency_enabled }}"
           concurrency_cancel_in_progress="${{ inputs.concurrency_cancel_in_progress }}"
-          enabled_default_group="js-ops-${GITHUB_WORKFLOW}-${GITHUB_REF}"
+          enabled_default_group="js-ops-${branch_name}"
 
           echo "Resolving build-and-scan job concurrency..."
+          echo "resolved branch_name='${branch_name}'"
           echo "input.concurrency_enabled='${concurrency_enabled}'"
           echo "input.concurrency_cancel_in_progress='${concurrency_cancel_in_progress}'"
-          echo "resolved default group template='js-ops-${GITHUB_WORKFLOW}-${GITHUB_REF}'"
+          echo "resolved default group template='js-ops-${branch_name}'"
 
           resolved_enabled_group="${enabled_default_group}"
 
@@ -363,87 +365,46 @@ jobs:
           RELEASE_BRANCH: ${{ steps.branches.outputs.release_branch }}
           IS_RELEASE_BRANCH: ${{ steps.branches.outputs.is_release_branch }}
           CONCURRENCY_ENABLED: ${{ steps.concurrency.outputs.concurrency_enabled }}
-          CONCURRENCY_CANCEL_IN_PROGRESS: ${{ steps.concurrency.outputs.concurrency_cancel_in_progress }}
           RESOLVED_CONCURRENCY_GROUP: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
           RESOLVED_CANCEL_IN_PROGRESS: ${{ steps.concurrency.outputs.resolved_cancel_in_progress }}
-          INSTALL_CMD: ${{ steps.commands.outputs.install_cmd }}
-          BUILD_CMD: ${{ steps.commands.outputs.build_cmd }}
-          LINT_CMD: ${{ steps.commands.outputs.lint_cmd }}
-          TYPECHECK_CMD: ${{ steps.commands.outputs.typecheck_cmd }}
-          TEST_CMD: ${{ steps.commands.outputs.test_cmd }}
-          SCAN_CMD: ${{ steps.commands.outputs.scan_cmd }}
           BUNDLE_ARTIFACT_NAME: ${{ steps.meta.outputs.bundle_artifact_name }}
-          RELEASE_METADATA_ARTIFACT: ${{ steps.meta.outputs.release_metadata_artifact }}
-          RELEASE_ASSETS_ARTIFACT: ${{ steps.meta.outputs.release_assets_artifact }}
-          BUNDLE_FILE_NAME: ${{ steps.meta.outputs.bundle_file_name }}
-          CHECKSUM_FILE_NAME: ${{ steps.meta.outputs.checksum_file_name }}
-          METADATA_FILE_NAME: ${{ steps.meta.outputs.metadata_file_name }}
         run: |
           release_decision="skip"
           if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
             release_decision="run"
           fi
 
-          echo "Configuration trace:"
-          echo "app=${APP_NAME}"
-          echo "working_directory=${WD}"
-          echo "package_manager=${PACKAGE_MANAGER}"
-          echo "node_version=${NODE_VERSION}"
-          echo "package=${PKG_NAME}@${PKG_VERSION}"
-          echo "current_branch=${CURRENT_BRANCH}"
-          echo "release_branch=${RELEASE_BRANCH}"
-          echo "is_release_branch=${IS_RELEASE_BRANCH}"
-          echo "github-release decision=${release_decision}"
-          echo "concurrency_enabled=${CONCURRENCY_ENABLED}"
-          echo "concurrency_cancel_in_progress=${CONCURRENCY_CANCEL_IN_PROGRESS}"
-          echo "build-and-scan.resolved_concurrency_group=${RESOLVED_CONCURRENCY_GROUP}"
-          echo "build-and-scan.resolved_cancel_in_progress=${RESOLVED_CANCEL_IN_PROGRESS}"
-          echo "install_cmd=${INSTALL_CMD}"
-          echo "build_cmd=${BUILD_CMD}"
-          echo "lint_cmd=${LINT_CMD}"
-          echo "typecheck_cmd=${TYPECHECK_CMD}"
-          echo "test_cmd=${TEST_CMD}"
-          echo "scan_cmd=${SCAN_CMD}"
-          echo "bundle_artifact_name=${BUNDLE_ARTIFACT_NAME}"
-          echo "release_metadata_artifact=${RELEASE_METADATA_ARTIFACT}"
-          echo "release_assets_artifact=${RELEASE_ASSETS_ARTIFACT}"
-          echo "bundle_file_name=${BUNDLE_FILE_NAME}"
-          echo "checksum_file_name=${CHECKSUM_FILE_NAME}"
-          echo "metadata_file_name=${METADATA_FILE_NAME}"
+          enabled_checks=()
+          [[ "${HAS_LINT}" == "true" ]] && enabled_checks+=("lint")
+          [[ "${HAS_TYPECHECK}" == "true" ]] && enabled_checks+=("typecheck")
+          [[ "${HAS_TEST}" == "true" ]] && enabled_checks+=("test")
+          [[ "${HAS_SCAN}" == "true" ]] && enabled_checks+=("scan")
+          if [[ ${#enabled_checks[@]} -eq 0 ]]; then
+            checks_display="none"
+          else
+            checks_display="$(printf '%s, ' "${enabled_checks[@]}")"
+            checks_display="${checks_display%, }"
+          fi
+
+          echo "::notice title=JS Ops Config::app=${APP_NAME}, version=${PKG_VERSION}, branch=${CURRENT_BRANCH}, release=${release_decision}, checks=${checks_display}"
 
           {
             echo "## JS Ops Configuration"
             echo ""
             echo "- app: ${APP_NAME}"
-            echo "- working directory: ${WD}"
-            echo "- package manager: ${PACKAGE_MANAGER}"
-            echo "- node version: ${NODE_VERSION}"
             echo "- package: ${PKG_NAME}@${PKG_VERSION}"
+            echo "- node version: ${NODE_VERSION}"
+            echo "- package manager: ${PACKAGE_MANAGER}"
+            echo "- working directory: ${WD}"
+            echo "- checks to run: ${checks_display}"
             echo "- release version: ${PKG_VERSION}"
-            echo "- lint script present: ${HAS_LINT}"
-            echo "- typecheck script present: ${HAS_TYPECHECK}"
-            echo "- test script present: ${HAS_TEST}"
-            echo "- scan script present: ${HAS_SCAN}"
             echo "- current branch: ${CURRENT_BRANCH}"
             echo "- release branch: ${RELEASE_BRANCH}"
-            echo "- release branch match: ${IS_RELEASE_BRANCH}"
             echo "- github-release decision: ${release_decision}"
             echo "- concurrency enabled: ${CONCURRENCY_ENABLED}"
-            echo "- concurrency cancel-in-progress input: ${CONCURRENCY_CANCEL_IN_PROGRESS}"
-            echo "- build-and-scan resolved concurrency group: ${RESOLVED_CONCURRENCY_GROUP}"
-            echo "- build-and-scan resolved cancel in progress: ${RESOLVED_CANCEL_IN_PROGRESS}"
-            echo "- install command: ${INSTALL_CMD}"
-            echo "- build command: ${BUILD_CMD}"
-            echo "- lint command: ${LINT_CMD}"
-            echo "- typecheck command: ${TYPECHECK_CMD}"
-            echo "- test command: ${TEST_CMD}"
-            echo "- scan command: ${SCAN_CMD}"
+            echo "- concurrency group: ${RESOLVED_CONCURRENCY_GROUP}"
+            echo "- concurrency cancel in progress: ${RESOLVED_CANCEL_IN_PROGRESS}"
             echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
-            echo "- release metadata artifact: ${RELEASE_METADATA_ARTIFACT}"
-            echo "- release assets artifact: ${RELEASE_ASSETS_ARTIFACT}"
-            echo "- bundle file: ${BUNDLE_FILE_NAME}"
-            echo "- checksum file: ${CHECKSUM_FILE_NAME}"
-            echo "- metadata file: ${METADATA_FILE_NAME}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   build-and-scan:
@@ -605,6 +566,35 @@ jobs:
             ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
             ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
 
+      - name: Build-and-scan summary
+        env:
+          BUNDLE_SHA256: ${{ steps.bundle.outputs.bundle_sha256 }}
+          BUNDLE_ARTIFACT_NAME: ${{ env.BUNDLE_ARTIFACT_NAME }}
+          BUNDLE_FILE_NAME: ${{ env.BUNDLE_FILE_NAME }}
+          VERSION: ${{ env.VERSION }}
+          RELEASE_JOB_ENABLED: ${{ needs.config.outputs.is_release_branch }}
+          CONCURRENCY_GROUP: ${{ needs.config.outputs.resolved_concurrency_group }}
+          CONCURRENCY_CANCEL_IN_PROGRESS: ${{ needs.config.outputs.resolved_cancel_in_progress }}
+        run: |
+          release_job_decision="skip"
+          if [[ "${RELEASE_JOB_ENABLED}" == "true" ]]; then
+            release_job_decision="run"
+          fi
+
+          echo "::notice title=JS Ops Build and Scan::version=${VERSION}, artifact=${BUNDLE_ARTIFACT_NAME}, checksum=${BUNDLE_SHA256}, release=${release_job_decision}"
+
+          {
+            echo "## JS Ops Build and Scan"
+            echo ""
+            echo "- version: ${VERSION}"
+            echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
+            echo "- bundle file: ${BUNDLE_FILE_NAME}"
+            echo "- bundle sha256: ${BUNDLE_SHA256}"
+            echo "- github-release decision: ${release_job_decision}"
+            echo "- concurrency group: ${CONCURRENCY_GROUP}"
+            echo "- concurrency cancel in progress: ${CONCURRENCY_CANCEL_IN_PROGRESS}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   github-release:
     name: GitHub Release
     runs-on: ubuntu-24.04
@@ -639,3 +629,19 @@ jobs:
             ${{ runner.temp }}/release-assets/${{ needs.config.outputs.metadata_file_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.gh_token != '' && secrets.gh_token || github.token }}
+
+      - name: GitHub-release summary
+        env:
+          VERSION: ${{ needs.config.outputs.version }}
+          BUNDLE_FILE_NAME: ${{ needs.config.outputs.bundle_file_name }}
+          CHECKSUM_FILE_NAME: ${{ needs.config.outputs.checksum_file_name }}
+          METADATA_FILE_NAME: ${{ needs.config.outputs.metadata_file_name }}
+        run: |
+          echo "::notice title=JS Ops GitHub Release::published tag=${VERSION}, files=${BUNDLE_FILE_NAME},${CHECKSUM_FILE_NAME},${METADATA_FILE_NAME}"
+
+          {
+            echo "## JS Ops GitHub Release"
+            echo ""
+            echo "- tag: ${VERSION}"
+            echo "- published files: ${BUNDLE_FILE_NAME}, ${CHECKSUM_FILE_NAME}, ${METADATA_FILE_NAME}"
+          } >> "${GITHUB_STEP_SUMMARY}"
