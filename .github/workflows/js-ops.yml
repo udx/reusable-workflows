@@ -38,11 +38,6 @@ on:
         required: false
         default: true
         type: boolean
-      concurrency_group:
-        description: "Concurrency group key. Defaults to js-ops-${{ github.workflow }}-${{ github.ref }}."
-        required: false
-        default: "js-ops-${{ github.workflow }}-${{ github.ref }}"
-        type: string
       concurrency_cancel_in_progress:
         description: "Cancel in-progress runs for the same concurrency group."
         required: false
@@ -105,7 +100,6 @@ jobs:
       release_branch: ${{ steps.branches.outputs.release_branch }}
       is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
       concurrency_enabled: ${{ steps.concurrency.outputs.concurrency_enabled }}
-      concurrency_group_input: ${{ steps.concurrency.outputs.concurrency_group_input }}
       concurrency_cancel_in_progress: ${{ steps.concurrency.outputs.concurrency_cancel_in_progress }}
       resolved_concurrency_group: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
       resolved_cancel_in_progress: ${{ steps.concurrency.outputs.resolved_cancel_in_progress }}
@@ -169,25 +163,15 @@ jobs:
         id: concurrency
         run: |
           concurrency_enabled="${{ inputs.concurrency_enabled }}"
-          concurrency_group_input="${{ inputs.concurrency_group }}"
           concurrency_cancel_in_progress="${{ inputs.concurrency_cancel_in_progress }}"
-          default_group_template='js-ops-${{ github.workflow }}-${{ github.ref }}'
           enabled_default_group="js-ops-${GITHUB_WORKFLOW}-${GITHUB_REF}"
 
           echo "Resolving build-and-scan job concurrency..."
           echo "input.concurrency_enabled='${concurrency_enabled}'"
-          echo "input.concurrency_group='${concurrency_group_input}'"
           echo "input.concurrency_cancel_in_progress='${concurrency_cancel_in_progress}'"
+          echo "resolved default group template='js-ops-${GITHUB_WORKFLOW}-${GITHUB_REF}'"
 
-          if [[ -n "${concurrency_group_input}" ]]; then
-            if [[ "${concurrency_group_input}" == "${default_group_template}" ]]; then
-              resolved_enabled_group="${enabled_default_group}"
-            else
-              resolved_enabled_group="${concurrency_group_input}"
-            fi
-          else
-            resolved_enabled_group="${enabled_default_group}"
-          fi
+          resolved_enabled_group="${enabled_default_group}"
 
           if [[ "${concurrency_enabled}" == "true" ]]; then
             resolved_concurrency_group="${resolved_enabled_group}"
@@ -198,7 +182,6 @@ jobs:
           fi
 
           echo "concurrency_enabled=${concurrency_enabled}" >> "${GITHUB_OUTPUT}"
-          echo "concurrency_group_input=${concurrency_group_input}" >> "${GITHUB_OUTPUT}"
           echo "concurrency_cancel_in_progress=${concurrency_cancel_in_progress}" >> "${GITHUB_OUTPUT}"
           echo "resolved_concurrency_group=${resolved_concurrency_group}" >> "${GITHUB_OUTPUT}"
           echo "resolved_cancel_in_progress=${resolved_cancel_in_progress}" >> "${GITHUB_OUTPUT}"
@@ -380,7 +363,6 @@ jobs:
           RELEASE_BRANCH: ${{ steps.branches.outputs.release_branch }}
           IS_RELEASE_BRANCH: ${{ steps.branches.outputs.is_release_branch }}
           CONCURRENCY_ENABLED: ${{ steps.concurrency.outputs.concurrency_enabled }}
-          CONCURRENCY_GROUP_INPUT: ${{ steps.concurrency.outputs.concurrency_group_input }}
           CONCURRENCY_CANCEL_IN_PROGRESS: ${{ steps.concurrency.outputs.concurrency_cancel_in_progress }}
           RESOLVED_CONCURRENCY_GROUP: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
           RESOLVED_CANCEL_IN_PROGRESS: ${{ steps.concurrency.outputs.resolved_cancel_in_progress }}
@@ -413,7 +395,6 @@ jobs:
           echo "is_release_branch=${IS_RELEASE_BRANCH}"
           echo "github-release decision=${release_decision}"
           echo "concurrency_enabled=${CONCURRENCY_ENABLED}"
-          echo "concurrency_group_input=${CONCURRENCY_GROUP_INPUT}"
           echo "concurrency_cancel_in_progress=${CONCURRENCY_CANCEL_IN_PROGRESS}"
           echo "build-and-scan.resolved_concurrency_group=${RESOLVED_CONCURRENCY_GROUP}"
           echo "build-and-scan.resolved_cancel_in_progress=${RESOLVED_CANCEL_IN_PROGRESS}"
@@ -448,7 +429,6 @@ jobs:
             echo "- release branch match: ${IS_RELEASE_BRANCH}"
             echo "- github-release decision: ${release_decision}"
             echo "- concurrency enabled: ${CONCURRENCY_ENABLED}"
-            echo "- concurrency group input: ${CONCURRENCY_GROUP_INPUT}"
             echo "- concurrency cancel-in-progress input: ${CONCURRENCY_CANCEL_IN_PROGRESS}"
             echo "- build-and-scan resolved concurrency group: ${RESOLVED_CONCURRENCY_GROUP}"
             echo "- build-and-scan resolved cancel in progress: ${RESOLVED_CANCEL_IN_PROGRESS}"

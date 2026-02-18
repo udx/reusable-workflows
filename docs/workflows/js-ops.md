@@ -32,7 +32,7 @@ jobs:
 - Resolves package-manager commands once (install/build/lint/typecheck/test/scan), with package manager auto-detection when input is omitted
 - Detects available optional scripts (`lint`, `typecheck`, `test`, `scan`)
 - Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
-- Resolves concurrency behavior (`concurrency_enabled`, `concurrency_group_input`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
+- Resolves concurrency behavior (`concurrency_enabled`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
 - Emits detailed configuration trace logs (resolved inputs, commands, artifacts, and release decision) for debugging
 - Uses `package.json` version as release version/tag
 - Emits configuration summary in the job summary
@@ -69,7 +69,6 @@ jobs:
 | `package_manager`   | Package manager (`npm` or `yarn`). If empty, auto-detected from `packageManager` field and lockfiles | `""` | |
 | `release_branch`    | Branch that enables GitHub Release publishing. Set `""` to disable publishing (verify-only) | `latest` | |
 | `concurrency_enabled` | Enable `build-and-scan` job concurrency behavior | `true` | |
-| `concurrency_group` | Concurrency group key used when concurrency is enabled | `js-ops-${{ github.workflow }}-${{ github.ref }}` | |
 | `concurrency_cancel_in_progress` | Whether to cancel in-progress runs in the same concurrency group | `true` | |
 
 ## Secrets

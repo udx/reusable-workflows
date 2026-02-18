@@ -30,7 +30,6 @@ jobs:
       node_version: "24"
       package_manager: yarn
       release_branch: release
-      concurrency_group: js-ops-${{ github.repository }}-${{ github.ref }}
       concurrency_cancel_in_progress: false
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
