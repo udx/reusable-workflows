@@ -1,4 +1,4 @@
-name: JS Ops Examples
+name: JS Ops Example
 
 on:
   push:
@@ -7,17 +7,20 @@ on:
   pull_request:
 
 jobs:
-  # Verify-only example: runs on all pushes/PRs, never publishes GitHub Release.
-  verify-only:
+  # ===========================================================================
+  # Default Inputs: defaults-only
+  # USE CASE: Minimal caller config (template defaults apply)
+  # ===========================================================================
+  defaults-only:
     permissions:
-      contents: read
+      contents: write
     uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
-    with:
-      release_branch: ""
 
-  # Release example: release publishing enabled only on release branch pushes.
-  release-branch-only:
-    if: github.event_name == 'push' && github.ref_name == 'release'
+  # ===========================================================================
+  # Full Inputs + Release Branch: full-inputs-release-branch
+  # USE CASE: Explicit config with release publishing only on `release` branch
+  # ===========================================================================
+  full-inputs-release-branch:
     permissions:
       contents: write
     uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
@@ -29,3 +32,6 @@ jobs:
       release_branch: release
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
+
+# Full Documentation:
+#   - See docs/workflows/js-ops.md for complete setup guides, examples, and behavior details
