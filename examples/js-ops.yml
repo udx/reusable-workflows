@@ -1,20 +1,23 @@
-name: Release JS App Bundle
+name: JS Ops Examples
 
 on:
   push:
     branches:
-      - latest
-  workflow_dispatch:
+      - "**"
+  pull_request:
 
 jobs:
-  standard-release:
-    if: github.event_name == 'push'
+  # Verify-only example: runs on all pushes/PRs, never publishes GitHub Release.
+  verify-only:
     permissions:
-      contents: write
+      contents: read
     uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
 
-  configured-release:
-    if: github.event_name == 'workflow_dispatch'
+  # Release example: release publishing enabled only on release branch pushes.
+  release-branch-only:
+    if: github.event_name == 'push' && github.ref_name == 'release'
     permissions:
       contents: write
     uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
@@ -23,5 +26,6 @@ jobs:
       working_directory: apps/web
       node_version: "24"
       package_manager: yarn
+      release_branch: release
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}

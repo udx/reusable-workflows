@@ -3,7 +3,7 @@ name: JS App Release Ops
 
 # Reusable workflow for immutable Next.js standalone bundle releases.
 # Supports npm/yarn, runs quality/security scripts when present in package.json,
-# publishes release assets to GitHub, and emits release metadata.
+# optionally publishes release assets to GitHub, and emits release metadata.
 
 on:
   workflow_call:
@@ -27,6 +27,11 @@ on:
         description: "Package manager to use: npm or yarn. If empty, workflow auto-detects."
         required: false
         default: ""
+        type: string
+      release_branch:
+        description: "Branch name that triggers GitHub Release publishing. Set empty to disable publishing."
+        required: false
+        default: "latest"
         type: string
     secrets:
       gh_token:
@@ -81,6 +86,9 @@ jobs:
       node_version: ${{ steps.validate.outputs.node_version }}
       working_directory: ${{ steps.validate.outputs.working_directory }}
       package_manager: ${{ steps.pkg.outputs.package_manager }}
+      current_branch: ${{ steps.branches.outputs.branch_name }}
+      release_branch: ${{ steps.branches.outputs.release_branch }}
+      is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -91,27 +99,67 @@ jobs:
           wd="${{ inputs.working_directory }}"
           node_version="${{ inputs.node_version }}"
 
+          echo "Validating js-ops inputs..."
+          echo "input.working_directory='${wd}'"
+          echo "input.node_version='${node_version}'"
+
           if [[ -z "${wd}" ]]; then
             wd="."
+            echo "working_directory empty; defaulting to '.'"
           fi
 
           if [[ ! -d "${wd}" ]]; then
             echo "::error::working_directory does not exist: ${wd}"
             exit 1
           fi
+          echo "working_directory exists: ${wd}"
 
           if [[ ! -f "${wd}/package.json" ]]; then
             echo "::error::package.json not found in working_directory: ${wd}"
             exit 1
           fi
+          echo "package.json found: ${wd}/package.json"
 
           echo "node_version=${node_version}" >> "${GITHUB_OUTPUT}"
           echo "working_directory=${wd}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved outputs: node_version='${node_version}', working_directory='${wd}'"
+
+      - name: Determine Branch Information
+        id: branches
+        run: |
+          branch_name="${GITHUB_REF#refs/heads/}"
+          release_branch="${{ inputs.release_branch }}"
+          is_release_branch="false"
+
+          echo "Resolving release branch gate..."
+          echo "github.ref='${GITHUB_REF}'"
+          echo "resolved branch_name='${branch_name}'"
+          echo "input.release_branch='${release_branch}'"
+
+          if [[ -n "${release_branch}" && "${branch_name}" == "${release_branch}" ]]; then
+            is_release_branch="true"
+          fi
+
+          echo "branch_name=${branch_name}" >> "${GITHUB_OUTPUT}"
+          echo "release_branch=${release_branch}" >> "${GITHUB_OUTPUT}"
+          echo "is_release_branch=${is_release_branch}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved outputs: branch_name='${branch_name}', release_branch='${release_branch}', is_release_branch='${is_release_branch}'"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.validate.outputs.node_version }}
+
+      - name: Report runtime versions
+        run: |
+          echo "Runtime versions after setup-node:"
+          echo "node: $(node --version)"
+          echo "npm: $(npm --version)"
+          if command -v yarn >/dev/null 2>&1; then
+            echo "yarn: $(yarn --version)"
+          else
+            echo "yarn: not available before install (expected when using Corepack)"
+          fi
 
       - name: Read package metadata and scripts
         id: pkg
@@ -120,8 +168,12 @@ jobs:
           INPUT_PACKAGE_MANAGER: ${{ inputs.package_manager }}
           INPUT_APP_NAME: ${{ inputs.app_name }}
         run: |
-          node - <<'NODE' >> "${GITHUB_OUTPUT}"
+          node - <<'NODE'
           const fs = require('fs');
+          const outputPath = process.env.GITHUB_OUTPUT;
+          const emit = (key, value) => fs.appendFileSync(outputPath, `${key}=${value}\n`);
+
+          console.log('Reading package metadata and script availability...');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           const scripts = pkg.scripts || {};
 
@@ -162,12 +214,20 @@ jobs:
             .replace(/[^a-zA-Z0-9._-]/g, '-');
 
           const names = ['lint', 'typecheck', 'test', 'scan', 'build'];
-          console.log(`app_name=${appName}`);
-          console.log(`package_manager=${packageManager}`);
-          console.log(`package_name=${pkg.name}`);
-          console.log(`package_version=${pkg.version}`);
+          emit('app_name', appName);
+          emit('package_manager', packageManager);
+          emit('package_name', pkg.name);
+          emit('package_version', pkg.version);
           for (const name of names) {
-            console.log(`has_${name}=${scripts[name] ? 'true' : 'false'}`);
+            emit(`has_${name}`, scripts[name] ? 'true' : 'false');
+          }
+
+          console.log(`Resolved package_name='${pkg.name}'`);
+          console.log(`Resolved package_version='${pkg.version}'`);
+          console.log(`Resolved app_name='${appName}'`);
+          console.log(`Resolved package_manager='${packageManager}'`);
+          for (const name of names) {
+            console.log(`script.${name}=${scripts[name] ? 'present' : 'missing'}`);
           }
           NODE
 
@@ -201,6 +261,14 @@ jobs:
             scan_cmd="yarn scan"
           fi
 
+          echo "Resolving command set for package_manager='${PM}'..."
+          echo "Resolved install_cmd='${install_cmd}'"
+          echo "Resolved build_cmd='${build_cmd}'"
+          echo "Resolved lint_cmd='${lint_cmd}'"
+          echo "Resolved typecheck_cmd='${typecheck_cmd}'"
+          echo "Resolved test_cmd='${test_cmd}'"
+          echo "Resolved scan_cmd='${scan_cmd}'"
+
           echo "install_cmd=${install_cmd}" >> "${GITHUB_OUTPUT}"
           echo "build_cmd=${build_cmd}" >> "${GITHUB_OUTPUT}"
           echo "lint_cmd=${lint_cmd}" >> "${GITHUB_OUTPUT}"
@@ -220,6 +288,14 @@ jobs:
           bundle_file_name="${bundle_artifact_name}.tar.gz"
           checksum_file_name="${bundle_file_name}.sha256"
           metadata_file_name="release.json"
+
+          echo "Building artifact metadata..."
+          echo "Resolved bundle_artifact_name='${bundle_artifact_name}'"
+          echo "Resolved release_metadata_artifact='${release_metadata_artifact}'"
+          echo "Resolved release_assets_artifact='${release_assets_artifact}'"
+          echo "Resolved bundle_file_name='${bundle_file_name}'"
+          echo "Resolved checksum_file_name='${checksum_file_name}'"
+          echo "Resolved metadata_file_name='${metadata_file_name}'"
 
           echo "bundle_artifact_name=${bundle_artifact_name}" >> "${GITHUB_OUTPUT}"
           echo "artifact_type=bundle" >> "${GITHUB_OUTPUT}"
@@ -241,7 +317,50 @@ jobs:
           HAS_TYPECHECK: ${{ steps.pkg.outputs.has_typecheck }}
           HAS_TEST: ${{ steps.pkg.outputs.has_test }}
           HAS_SCAN: ${{ steps.pkg.outputs.has_scan }}
+          CURRENT_BRANCH: ${{ steps.branches.outputs.branch_name }}
+          RELEASE_BRANCH: ${{ steps.branches.outputs.release_branch }}
+          IS_RELEASE_BRANCH: ${{ steps.branches.outputs.is_release_branch }}
+          INSTALL_CMD: ${{ steps.commands.outputs.install_cmd }}
+          BUILD_CMD: ${{ steps.commands.outputs.build_cmd }}
+          LINT_CMD: ${{ steps.commands.outputs.lint_cmd }}
+          TYPECHECK_CMD: ${{ steps.commands.outputs.typecheck_cmd }}
+          TEST_CMD: ${{ steps.commands.outputs.test_cmd }}
+          SCAN_CMD: ${{ steps.commands.outputs.scan_cmd }}
+          BUNDLE_ARTIFACT_NAME: ${{ steps.meta.outputs.bundle_artifact_name }}
+          RELEASE_METADATA_ARTIFACT: ${{ steps.meta.outputs.release_metadata_artifact }}
+          RELEASE_ASSETS_ARTIFACT: ${{ steps.meta.outputs.release_assets_artifact }}
+          BUNDLE_FILE_NAME: ${{ steps.meta.outputs.bundle_file_name }}
+          CHECKSUM_FILE_NAME: ${{ steps.meta.outputs.checksum_file_name }}
+          METADATA_FILE_NAME: ${{ steps.meta.outputs.metadata_file_name }}
         run: |
+          release_decision="skip"
+          if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
+            release_decision="run"
+          fi
+
+          echo "Configuration trace:"
+          echo "app=${APP_NAME}"
+          echo "working_directory=${WD}"
+          echo "package_manager=${PACKAGE_MANAGER}"
+          echo "node_version=${NODE_VERSION}"
+          echo "package=${PKG_NAME}@${PKG_VERSION}"
+          echo "current_branch=${CURRENT_BRANCH}"
+          echo "release_branch=${RELEASE_BRANCH}"
+          echo "is_release_branch=${IS_RELEASE_BRANCH}"
+          echo "github-release decision=${release_decision}"
+          echo "install_cmd=${INSTALL_CMD}"
+          echo "build_cmd=${BUILD_CMD}"
+          echo "lint_cmd=${LINT_CMD}"
+          echo "typecheck_cmd=${TYPECHECK_CMD}"
+          echo "test_cmd=${TEST_CMD}"
+          echo "scan_cmd=${SCAN_CMD}"
+          echo "bundle_artifact_name=${BUNDLE_ARTIFACT_NAME}"
+          echo "release_metadata_artifact=${RELEASE_METADATA_ARTIFACT}"
+          echo "release_assets_artifact=${RELEASE_ASSETS_ARTIFACT}"
+          echo "bundle_file_name=${BUNDLE_FILE_NAME}"
+          echo "checksum_file_name=${CHECKSUM_FILE_NAME}"
+          echo "metadata_file_name=${METADATA_FILE_NAME}"
+
           {
             echo "## JS Ops Configuration"
             echo ""
@@ -255,6 +374,22 @@ jobs:
             echo "- typecheck script present: ${HAS_TYPECHECK}"
             echo "- test script present: ${HAS_TEST}"
             echo "- scan script present: ${HAS_SCAN}"
+            echo "- current branch: ${CURRENT_BRANCH}"
+            echo "- release branch: ${RELEASE_BRANCH}"
+            echo "- release branch match: ${IS_RELEASE_BRANCH}"
+            echo "- github-release decision: ${release_decision}"
+            echo "- install command: ${INSTALL_CMD}"
+            echo "- build command: ${BUILD_CMD}"
+            echo "- lint command: ${LINT_CMD}"
+            echo "- typecheck command: ${TYPECHECK_CMD}"
+            echo "- test command: ${TEST_CMD}"
+            echo "- scan command: ${SCAN_CMD}"
+            echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
+            echo "- release metadata artifact: ${RELEASE_METADATA_ARTIFACT}"
+            echo "- release assets artifact: ${RELEASE_ASSETS_ARTIFACT}"
+            echo "- bundle file: ${BUNDLE_FILE_NAME}"
+            echo "- checksum file: ${CHECKSUM_FILE_NAME}"
+            echo "- metadata file: ${METADATA_FILE_NAME}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   build-and-scan:
@@ -417,7 +552,10 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-24.04
     needs: [config, build-and-scan]
-    if: always() && success()
+    if: |
+      always() &&
+      success() &&
+      needs.config.outputs.is_release_branch == 'true'
     permissions:
       contents: write
     steps:

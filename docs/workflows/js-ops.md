@@ -1,10 +1,10 @@
 # JS App Release Ops Workflow
 
-<!-- short: Build, verify, and release immutable Next.js standalone bundles to GitHub Releases -->
+<!-- short: Build, verify, and optionally release immutable Next.js standalone bundles to GitHub Releases -->
 
 Reusable workflow for Next.js applications.
 
-It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows.
+It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows.
 
 ## Quick Start
 
@@ -31,6 +31,8 @@ jobs:
 - Ensures package metadata exists (`name`, `version`) and `scripts.build` is present
 - Resolves package-manager commands once (install/build/lint/typecheck/test/scan), with package manager auto-detection when input is omitted
 - Detects available optional scripts (`lint`, `typecheck`, `test`, `scan`)
+- Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
+- Emits detailed configuration trace logs (resolved inputs, commands, artifacts, and release decision) for debugging
 - Uses `package.json` version as release version/tag
 - Emits configuration summary in the job summary
 
@@ -47,10 +49,13 @@ jobs:
 ### `github-release`
 
 - Downloads release assets artifact
+- Runs only when `config` resolved `is_release_branch == true`
 - Creates/updates GitHub Release with:
   - bundle archive
   - checksum file
   - `release.json`
+
+`config` and `build-and-scan` always run. Bundle packaging and metadata generation happen regardless of whether publishing is enabled.
 
 ## Inputs
 
@@ -60,6 +65,7 @@ jobs:
 | `working_directory` | Directory containing `package.json`           | `.`     | |
 | `node_version`      | Node.js version                               | `24`    | |
 | `package_manager`   | Package manager (`npm` or `yarn`). If empty, auto-detected from `packageManager` field and lockfiles | `""` | |
+| `release_branch`    | Branch that enables GitHub Release publishing. Set `""` to disable publishing (verify-only) | `latest` | |
 
 ## Secrets
 
@@ -116,6 +122,46 @@ jobs:
       package_manager: yarn
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
+```
+
+### Verify-Only (all pushes/PRs, no GitHub Release publish)
+
+```yaml
+name: Verify JS App Bundle
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  verify-only:
+    permissions:
+      contents: read
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
+```
+
+### Release Branch Gating from Caller
+
+```yaml
+name: Verify + Release on release branch
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  js-ops:
+    permissions:
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: release
 ```
 
 ## Required Next.js Build Output
