@@ -12,7 +12,7 @@ jobs:
       id-token: write
     uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
     with:
-      node_version: "22"
+      node_version: "24"
       release_branch: "latest"
       provenance: "true"
       dist_dir: "dist"
