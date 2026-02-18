@@ -4,7 +4,7 @@
 
 Reusable workflow for Next.js applications.
 
-It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows.
+It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows. It also supports reusable input-driven concurrency controls so callers can choose queue/cancel behavior without duplicating `concurrency` blocks.
 
 ## Quick Start
 
@@ -32,6 +32,7 @@ jobs:
 - Resolves package-manager commands once (install/build/lint/typecheck/test/scan), with package manager auto-detection when input is omitted
 - Detects available optional scripts (`lint`, `typecheck`, `test`, `scan`)
 - Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
+- Resolves concurrency behavior (`concurrency_enabled`, `concurrency_group_input`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
 - Emits detailed configuration trace logs (resolved inputs, commands, artifacts, and release decision) for debugging
 - Uses `package.json` version as release version/tag
 - Emits configuration summary in the job summary
@@ -39,6 +40,7 @@ jobs:
 ### `build-and-scan`
 
 - Installs dependencies using config-resolved command
+- Applies config-resolved job concurrency policy
 - Runs `lint`, `typecheck`, `test`, and `scan` only when each script exists in `package.json`
 - Builds production app (`NODE_ENV=production`)
 - Packages `.next/standalone`, `.next/static`, and `public` into `tar.gz`
@@ -66,6 +68,9 @@ jobs:
 | `node_version`      | Node.js version                               | `24`    | |
 | `package_manager`   | Package manager (`npm` or `yarn`). If empty, auto-detected from `packageManager` field and lockfiles | `""` | |
 | `release_branch`    | Branch that enables GitHub Release publishing. Set `""` to disable publishing (verify-only) | `latest` | |
+| `concurrency_enabled` | Enable `build-and-scan` job concurrency behavior | `true` | |
+| `concurrency_group` | Concurrency group key used when concurrency is enabled | `js-ops-${{ github.workflow }}-${{ github.ref }}` | |
+| `concurrency_cancel_in_progress` | Whether to cancel in-progress runs in the same concurrency group | `true` | |
 
 ## Secrets
 
@@ -162,6 +167,47 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
     with:
       release_branch: release
+```
+
+## Concurrency Controls
+
+By default, `js-ops` applies concurrency on the `build-and-scan` job with:
+
+- group: `js-ops-${{ github.workflow }}-${{ github.ref }}`
+- cancel-in-progress: `true`
+
+When `concurrency_enabled: false`, job concurrency is effectively disabled by assigning a per-run unique group and forcing `cancel-in-progress: false`.
+
+Prefer reusable-workflow concurrency inputs when you want one consistent policy across repositories. Keep concurrency in the caller workflow only when different caller jobs must coordinate through a shared caller-level group.
+
+### Queue All Runs (do not cancel superseded runs)
+
+```yaml
+jobs:
+  js-ops:
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      concurrency_cancel_in_progress: false
+```
+
+### Cancel Superseded Runs (default behavior, explicit)
+
+```yaml
+jobs:
+  js-ops:
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      concurrency_cancel_in_progress: true
+```
+
+### Disable Concurrency
+
+```yaml
+jobs:
+  js-ops:
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      concurrency_enabled: false
 ```
 
 ## Required Next.js Build Output

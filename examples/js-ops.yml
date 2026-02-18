@@ -30,8 +30,22 @@ jobs:
       node_version: "24"
       package_manager: yarn
       release_branch: release
+      concurrency_group: js-ops-${{ github.repository }}-${{ github.ref }}
+      concurrency_cancel_in_progress: false
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
+
+  # ===========================================================================
+  # Verify Only + Concurrency Disabled: verify-no-concurrency
+  # USE CASE: Always run checks/artifacts, never publish release, no queue/cancel
+  # ===========================================================================
+  verify-no-concurrency:
+    permissions:
+      contents: read
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
+      concurrency_enabled: false
 
 # Full Documentation:
 #   - See docs/workflows/js-ops.md for complete setup guides, examples, and behavior details
