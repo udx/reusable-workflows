@@ -33,7 +33,7 @@ jobs:
 - Detects available optional scripts (`lint`, `typecheck`, `test`, `scan`)
 - Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
 - Resolves concurrency behavior (`concurrency_enabled`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
-- Emits concise config notice + summary with high-signal values (app/version/branch/release decision/checks/concurrency/artifact)
+- Emits concise config summary with high-signal values (app/version/branch/release decision/checks/concurrency/artifact)
 - Uses `package.json` version as release version/tag
 - Emits configuration summary in the job summary
 
@@ -47,7 +47,7 @@ jobs:
 - Produces SHA-256 checksum
 - Generates `release.json`
 - Uploads bundle + metadata artifacts
-- Emits build-and-scan notice + summary (version, artifact, checksum, release decision, concurrency)
+- Emits build-and-scan summary with per-step status markers (`✅`, `⏭️`, `❌`) for install/lint/typecheck/test/scan/build/package
 
 ### `github-release`
 
@@ -57,7 +57,7 @@ jobs:
   - bundle archive
   - checksum file
   - `release.json`
-- Emits release notice + summary with published tag/files
+- Emits release summary with published tag/files
 
 `config` and `build-and-scan` always run. Bundle packaging and metadata generation happen regardless of whether publishing is enabled.
 

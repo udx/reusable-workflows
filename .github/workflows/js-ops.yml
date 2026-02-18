@@ -354,7 +354,6 @@ jobs:
           APP_NAME: ${{ steps.pkg.outputs.app_name }}
           PACKAGE_MANAGER: ${{ steps.pkg.outputs.package_manager }}
           NODE_VERSION: ${{ steps.validate.outputs.node_version }}
-          WD: ${{ steps.validate.outputs.working_directory }}
           PKG_NAME: ${{ steps.pkg.outputs.package_name }}
           PKG_VERSION: ${{ steps.pkg.outputs.package_version }}
           HAS_LINT: ${{ steps.pkg.outputs.has_lint }}
@@ -386,7 +385,15 @@ jobs:
             checks_display="${checks_display%, }"
           fi
 
-          echo "::notice title=JS Ops Config::app=${APP_NAME}, version=${PKG_VERSION}, branch=${CURRENT_BRANCH}, release=${release_decision}, checks=${checks_display}"
+          release_status="⏭️ skipped"
+          if [[ "${release_decision}" == "run" ]]; then
+            release_status="🚀 enabled"
+          fi
+
+          concurrency_status="✅ enabled"
+          if [[ "${CONCURRENCY_ENABLED}" != "true" ]]; then
+            concurrency_status="⏭️ disabled"
+          fi
 
           {
             echo "## JS Ops Configuration"
@@ -395,13 +402,11 @@ jobs:
             echo "- package: ${PKG_NAME}@${PKG_VERSION}"
             echo "- node version: ${NODE_VERSION}"
             echo "- package manager: ${PACKAGE_MANAGER}"
-            echo "- working directory: ${WD}"
             echo "- checks to run: ${checks_display}"
-            echo "- release version: ${PKG_VERSION}"
             echo "- current branch: ${CURRENT_BRANCH}"
             echo "- release branch: ${RELEASE_BRANCH}"
-            echo "- github-release decision: ${release_decision}"
-            echo "- concurrency enabled: ${CONCURRENCY_ENABLED}"
+            echo "- github-release: ${release_status}"
+            echo "- concurrency: ${concurrency_status}"
             echo "- concurrency group: ${RESOLVED_CONCURRENCY_GROUP}"
             echo "- concurrency cancel in progress: ${RESOLVED_CANCEL_IN_PROGRESS}"
             echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
@@ -450,30 +455,36 @@ jobs:
             ${{ needs.config.outputs.working_directory }}/yarn.lock
 
       - name: Install dependencies
+        id: install
         working-directory: ${{ needs.config.outputs.working_directory }}
         run: ${{ env.INSTALL_CMD }}
 
       - name: Run lint
+        id: lint
         if: ${{ needs.config.outputs.has_lint == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
         run: ${{ env.LINT_CMD }}
 
       - name: Run typecheck
+        id: typecheck
         if: ${{ needs.config.outputs.has_typecheck == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
         run: ${{ env.TYPECHECK_CMD }}
 
       - name: Run test
+        id: test
         if: ${{ needs.config.outputs.has_test == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
         run: ${{ env.TEST_CMD }}
 
       - name: Run scan
+        id: scan
         if: ${{ needs.config.outputs.has_scan == 'true' }}
         working-directory: ${{ needs.config.outputs.working_directory }}
         run: ${{ env.SCAN_CMD }}
 
       - name: Build app
+        id: build
         working-directory: ${{ needs.config.outputs.working_directory }}
         env:
           NODE_ENV: production
@@ -567,7 +578,20 @@ jobs:
             ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
 
       - name: Build-and-scan summary
+        if: ${{ always() }}
         env:
+          JOB_STATUS: ${{ job.status }}
+          HAS_LINT: ${{ needs.config.outputs.has_lint }}
+          HAS_TYPECHECK: ${{ needs.config.outputs.has_typecheck }}
+          HAS_TEST: ${{ needs.config.outputs.has_test }}
+          HAS_SCAN: ${{ needs.config.outputs.has_scan }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
           BUNDLE_SHA256: ${{ steps.bundle.outputs.bundle_sha256 }}
           BUNDLE_ARTIFACT_NAME: ${{ env.BUNDLE_ARTIFACT_NAME }}
           BUNDLE_FILE_NAME: ${{ env.BUNDLE_FILE_NAME }}
@@ -576,21 +600,59 @@ jobs:
           CONCURRENCY_GROUP: ${{ needs.config.outputs.resolved_concurrency_group }}
           CONCURRENCY_CANCEL_IN_PROGRESS: ${{ needs.config.outputs.resolved_cancel_in_progress }}
         run: |
-          release_job_decision="skip"
+          status_icon() {
+            case "$1" in
+              success) echo "✅ passed" ;;
+              failure) echo "❌ failed" ;;
+              skipped) echo "⏭️ skipped" ;;
+              cancelled) echo "🛑 cancelled" ;;
+              *) echo "❔ unknown" ;;
+            esac
+          }
+
+          optional_check_status() {
+            local enabled="$1"
+            local outcome="$2"
+            if [[ "${enabled}" != "true" ]]; then
+              echo "⚪ not configured"
+              return
+            fi
+            status_icon "${outcome}"
+          }
+
+          overall_status="$(status_icon "${JOB_STATUS}")"
+          install_status="$(status_icon "${INSTALL_OUTCOME}")"
+          lint_status="$(optional_check_status "${HAS_LINT}" "${LINT_OUTCOME}")"
+          typecheck_status="$(optional_check_status "${HAS_TYPECHECK}" "${TYPECHECK_OUTCOME}")"
+          test_status="$(optional_check_status "${HAS_TEST}" "${TEST_OUTCOME}")"
+          scan_status="$(optional_check_status "${HAS_SCAN}" "${SCAN_OUTCOME}")"
+          build_status="$(status_icon "${BUILD_OUTCOME}")"
+          package_status="$(status_icon "${BUNDLE_OUTCOME}")"
+
           if [[ "${RELEASE_JOB_ENABLED}" == "true" ]]; then
-            release_job_decision="run"
+            release_job_status="🚀 will run"
+          else
+            release_job_status="⏭️ skipped"
           fi
 
-          echo "::notice title=JS Ops Build and Scan::version=${VERSION}, artifact=${BUNDLE_ARTIFACT_NAME}, checksum=${BUNDLE_SHA256}, release=${release_job_decision}"
+          bundle_sha256_display="${BUNDLE_SHA256:-n/a}"
 
           {
             echo "## JS Ops Build and Scan"
             echo ""
+            echo "- overall result: ${overall_status}"
             echo "- version: ${VERSION}"
+            echo "- install dependencies: ${install_status}"
+            echo "- lint: ${lint_status}"
+            echo "- typecheck: ${typecheck_status}"
+            echo "- test: ${test_status}"
+            echo "- scan: ${scan_status}"
+            echo "- build app: ${build_status}"
+            echo "- package bundle: ${package_status}"
             echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
             echo "- bundle file: ${BUNDLE_FILE_NAME}"
-            echo "- bundle sha256: ${BUNDLE_SHA256}"
-            echo "- github-release decision: ${release_job_decision}"
+            echo "- bundle sha256: ${bundle_sha256_display}"
+            echo "- github-release: ${release_job_status}"
             echo "- concurrency group: ${CONCURRENCY_GROUP}"
             echo "- concurrency cancel in progress: ${CONCURRENCY_CANCEL_IN_PROGRESS}"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -637,11 +699,10 @@ jobs:
           CHECKSUM_FILE_NAME: ${{ needs.config.outputs.checksum_file_name }}
           METADATA_FILE_NAME: ${{ needs.config.outputs.metadata_file_name }}
         run: |
-          echo "::notice title=JS Ops GitHub Release::published tag=${VERSION}, files=${BUNDLE_FILE_NAME},${CHECKSUM_FILE_NAME},${METADATA_FILE_NAME}"
-
           {
             echo "## JS Ops GitHub Release"
             echo ""
+            echo "- release status: 🚀 published"
             echo "- tag: ${VERSION}"
             echo "- published files: ${BUNDLE_FILE_NAME}, ${CHECKSUM_FILE_NAME}, ${METADATA_FILE_NAME}"
           } >> "${GITHUB_STEP_SUMMARY}"
