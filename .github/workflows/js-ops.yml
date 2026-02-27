@@ -830,7 +830,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download release assets
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.config.outputs.release_assets_artifact }}
           path: ${{ runner.temp }}/release-assets

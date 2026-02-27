@@ -739,7 +739,7 @@ jobs:
 
       - name: Download SBOM Artifact
         if: env.ENABLE_SBOM == 'true'
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: sbom
           path: ./
@@ -1066,7 +1066,7 @@ jobs:
           echo "✅ Docker Hub tags prepared: $TAGS"
 
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: digests-*
           path: /tmp/digests
