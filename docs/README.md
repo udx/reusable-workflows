@@ -1,6 +1,6 @@
 # Documentation
 
-Reusable workflow documentation and setup guides live in `docs/workflows/`.
+Reusable workflow docs and maintainer references for this repository.
 
 ## Workflow Docs
 
@@ -9,10 +9,22 @@ Reusable workflow documentation and setup guides live in `docs/workflows/`.
 - `docs/workflows/npm-release-ops.md`
 - `docs/workflows/wp-gh-release-ops.md`
 
+## For Workflow Users
+
+- Use `docs/workflows/*.md` input/secret tables as the caller contract.
+- Use `examples/*.yml` as ready-to-use caller patterns.
+- Reference workflows by branch (`@master`), tag (`@v1.0.1`, `@v1`), or commit SHA.
+
 ## Contracts and Caller Patterns
 
 - `docs/caller-reference/caller-patterns.md` (canonical caller guide, contract-first rules, and common Q&A snippets)
 - Includes quick-scan core rules plus common Q&A examples.
+
+## For Maintainers
+
+- Release automation workflow: [`.github/workflows/_release.yml`](../.github/workflows/_release.yml)
+- Version strategy: [`ci/git-version.yml`](../ci/git-version.yml)
+- Release process details: [`docs/release-automation.md`](release-automation.md)
 
 ## Contract-First Policy
 
