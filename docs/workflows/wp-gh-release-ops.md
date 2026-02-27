@@ -50,6 +50,12 @@ jobs:
 
 Input naming note: the reusable workflow input is `tag` (not `tag-name`).
 
+### Caller Permissions and Token
+
+Set `contents: write` in the caller workflow so release/tag operations can succeed.
+
+This reusable workflow uses the default `github.token`; no additional `workflow_call` secret is required for standard release publishing.
+
 ## Versioning
 
 1. If `version` is specified, this version is used to parse changes.md for **Release Notes**

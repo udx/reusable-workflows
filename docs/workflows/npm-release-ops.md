@@ -53,6 +53,15 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 
 `npm-release-ops` does not accept an npm publish token secret (`NPM_TOKEN`/`NODE_AUTH_TOKEN`) via `workflow_call`.
 
+### Caller Permissions
+
+Set permissions in the caller job that uses this reusable workflow:
+
+- `contents: write` for tag/release operations
+- `id-token: write` for npm Trusted Publishing (OIDC)
+
+Called workflows cannot elevate permissions beyond caller scope.
+
 ## Contract-First Caller Example
 
 `npm-release-ops` does not declare `npm_token` or `package_version` in `on.workflow_call`.
@@ -78,6 +87,22 @@ jobs:
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
 ```
+
+### If your own reusable workflow declares `npm_token` and `package_version`
+
+The following pattern is valid for that separate workflow contract:
+
+```yaml
+jobs:
+  publish:
+    uses: my-org/my-repo/.github/workflows/publish.yml@main
+    with:
+      package_version: ${{ inputs.package_version }}
+    secrets:
+      npm_token: ${{ secrets.NPM_TOKEN }}
+```
+
+For this repository's `npm-release-ops`, use the contract-first snippet above, since this workflow does not declare those fields.
 
 ### When to provide `gh_token`
 

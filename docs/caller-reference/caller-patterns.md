@@ -22,6 +22,13 @@ Use this document when authoring or reviewing caller workflows (`jobs.<job_id>.u
 
 Permissions are set by the caller. A called workflow cannot elevate permissions beyond what the caller grants.
 
+Permission resolution model:
+
+- Enterprise/org/repo defaults set the baseline.
+- Caller workflow/job `permissions` sets the maximum available to the reusable workflow call.
+- Called workflow `permissions` can keep or reduce scope, but cannot exceed caller scope.
+- For cross-repository calls, always define required permissions on the caller job that uses the reusable workflow.
+
 ```yaml
 jobs:
   build-and-publish:
@@ -32,6 +39,17 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: my-app
+```
+
+Reusable workflow side (can reduce scope, not increase caller scope):
+
+```yaml
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      contents: write
 ```
 
 Use least privilege for each call:
@@ -47,6 +65,9 @@ For `on.workflow_call.inputs`, prefer stable, machine-friendly names:
 - use `lower_snake_case`
 - use domain prefixes when helpful (`docker_`, `gcp_`, `azure_`)
 - keep names descriptive and avoid ambiguous short names
+- use noun-based names that describe intent (`release_branch`, `deploy_environment`, `build_env_file`)
+- avoid generic placeholders (`value`, `data`, `config`, `param`)
+- keep names reasonably short and readable (recommended: `3-40` chars)
 
 ```yaml
 on:
@@ -57,6 +78,11 @@ on:
         required: true
         type: string
 ```
+
+Examples:
+
+- valid: `deploy_environment`, `release_branch`, `docker_repo`
+- avoid: `DeployEnvironment`, `release-branch`, `env`, `x`
 
 ### Conditional Calls
 
@@ -121,7 +147,7 @@ jobs:
     uses: ./.github/workflows/build.yml
 ```
 
-### Contract-First Rule (No Invented Fields)
+### Contract-First Rule
 
 Always match the called workflow's declared `on.workflow_call.inputs` and `on.workflow_call.secrets`.
 
@@ -130,7 +156,7 @@ Always match the called workflow's declared `on.workflow_call.inputs` and `on.wo
 - `wp-gh-release-ops` expects `tag` (not `tag_name`/`tag-name`)
 - `js-ops` supports build env via `build_env` (inline `KEY=VALUE`) or `build_env_file` (repository-root `.env` path), set only one
 
-If a field is not declared in the called workflow interface, do not pass it.
+If a field is not declared in the called workflow interface, skip it and map caller values to declared inputs/secrets.
 
 ## Workflow Contract Matrix
 
@@ -147,7 +173,7 @@ Ready-to-copy snippets for common reusable-workflow questions.
 
 ### 1. How do I ensure reusable workflow permissions are sufficient?
 
-Set explicit caller permissions:
+Set explicit caller permissions where the `uses:` call is made, including cross-repository calls:
 
 ```yaml
 jobs:
@@ -160,6 +186,8 @@ jobs:
     with:
       image_name: my-app
 ```
+
+A reusable workflow can narrow permissions in its own jobs, but it cannot gain permissions the caller did not grant.
 
 ### 2. How should I name new workflow_call inputs?
 
@@ -210,7 +238,9 @@ jobs:
 
 ### 6. How do I call `npm-release-ops` if I expected `npm_token` and `package_version`?
 
-Those fields are not part of the contract. Use declared inputs and keyless publishing:
+For this repository, those fields are not part of the `npm-release-ops` contract.
+
+Use declared inputs and keyless publishing:
 
 ```yaml
 jobs:
@@ -230,9 +260,23 @@ jobs:
 
 Release version is derived from repository `package.json` (no caller override input). Static npm publish tokens are legacy and not supported in `npm-release-ops`.
 
+If your own reusable workflow actually declares `npm_token` and `package_version`, pass them through `secrets` and `with` respectively:
+
+```yaml
+jobs:
+  publish:
+    uses: my-org/my-repo/.github/workflows/publish.yml@main
+    with:
+      package_version: ${{ inputs.package_version }}
+    secrets:
+      npm_token: ${{ secrets.NPM_TOKEN }}
+```
+
 ### 7. How do I call `docker-ops` with `image_name` and `registry_url`?
 
-`registry_url` is not a declared input. Use provider-specific inputs:
+For this repository, `docker-ops` does not declare `registry_url`.
+
+Use provider-specific inputs:
 
 ```yaml
 jobs:
@@ -250,9 +294,20 @@ jobs:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
 ```
 
+If your own reusable workflow declares `registry_url`, pass it exactly as declared:
+
+```yaml
+jobs:
+  publish:
+    uses: my-org/my-repo/.github/workflows/docker.yml@main
+    with:
+      image_name: my-app
+      registry_url: ghcr.io/my-org
+```
+
 ### 8. How do I securely pass `NPM_TOKEN` to a reusable workflow?
 
-Generic pattern (only if called workflow declares that secret):
+Generic secure pattern (only if the called workflow declares that secret):
 
 ```yaml
 jobs:
@@ -261,6 +316,8 @@ jobs:
     secrets:
       npm_token: ${{ secrets.NPM_TOKEN }}
 ```
+
+Use `jobs.<job_id>.secrets` mapping for secret transfer and never pass token values through `with:`.
 
 Repository-specific note: `npm-release-ops` supports only keyless npm publishing and does not accept npm publish token secrets via `workflow_call`.
 
