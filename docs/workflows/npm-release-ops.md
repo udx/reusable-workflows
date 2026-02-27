@@ -53,6 +53,31 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 | `slack_webhook_url` | Slack: Webhook URL for notifications                            | Optional |
 | `gh_token`          | GitHub: Token override for tagging/release (defaults to `github.token`) | Optional |
 
+## Contract-First Caller Example
+
+`npm-release-ops` does not declare `npm_token` or `package_version` in `on.workflow_call`.
+
+- Use `dist_dir` to point at the directory containing `package.json`.
+- The release version is read from `package.json`.
+- Use Trusted Publishing (`id-token: write`) for `npm publish`.
+
+```yaml
+jobs:
+  publish:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
+    with:
+      node_version: "24"
+      release_branch: "latest"
+      dist_dir: "dist"
+      provenance: true
+      enable_gh_release: true
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+```
+
 ### When to provide `gh_token`
 
 Use a custom token if your org enforces protected tag/branch rules that the default `github.token` cannot bypass (for example, tagging requires a service account or specific allowlist).

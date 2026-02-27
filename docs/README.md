@@ -136,47 +136,173 @@ If a field is not declared in the called workflow interface, do not pass it from
 
 ## Reusable Workflow FAQ (Benchmark-Oriented)
 
-### Which permissions should a caller set for reusable workflows?
+### 1. How to ensure a reusable workflow has required permissions (`contents: write`, `packages: write`)?
 
-Set permissions in the **caller job**. Common values are:
+Set permissions in the **caller job**. A called workflow cannot elevate them.
 
-- `contents: write` when the called workflow needs repository write operations (for example, creating releases).
-- `packages: write` when publishing packages or container images.
-- `id-token: write` when using OIDC/keyless cloud auth.
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: my-app
+```
 
-### How do I conditionally run reusable workflows for PR open/sync on `develop`?
+### 2. What naming convention should new `workflow_call` inputs follow?
 
-Prefer event filters:
+Use `lower_snake_case` with descriptive names (for example `deploy_environment`).
+
+```yaml
+on:
+  workflow_call:
+    inputs:
+      deploy_environment:
+        description: "Target environment (dev|staging|production)"
+        required: true
+        type: string
+```
+
+### 3. How to call reusable workflow only on PR `opened`/`synchronized` for `develop`?
+
+Use pull request event filters.
 
 ```yaml
 on:
   pull_request:
     branches: [develop]
     types: [opened, synchronized]
+
+jobs:
+  validate:
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
 ```
 
-Then call the reusable workflow in the job with workflow-specific inputs (for example `release_branch: ""` for verify-only behavior).
-
-### How do I consume an output like `deployment_url` from a reusable workflow?
-
-Use `needs.<job_id>.outputs.<output_name>` in downstream jobs:
+### 4. How to consume reusable output like `deployment_url`?
 
 ```yaml
-needs: deploy
-run: echo "${{ needs.deploy.outputs.deployment_url }}"
+jobs:
+  deploy:
+    uses: my-org/my-repo/.github/workflows/deploy.yml@main
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - run: echo "${{ needs.deploy.outputs.deployment_url }}"
 ```
 
-### How do I call a reusable workflow from another repository?
+### 5. How to call `wp-gh-release-ops` with a `tag_name` value?
+
+`wp-gh-release-ops` input is `tag` (not `tag_name`). Map your caller variable/value to `tag`.
 
 ```yaml
-uses: my-org/my-repo/.github/workflows/build.yml@main
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/wp-gh-release-ops.yml@master
+    with:
+      tag: ${{ inputs.tag_name }}
+      version: ${{ inputs.version }}
+      prerelease: ${{ inputs.prerelease }}
 ```
 
-For same-repo calls, use:
+### 6. How to call `npm-release-ops` if you expected `npm_token` and `package_version`?
+
+`npm-release-ops` does not declare `npm_token` or `package_version` in `workflow_call`. Use declared inputs (`dist_dir`, `release_branch`, etc.). Package version is read from `package.json` in `dist_dir`.
 
 ```yaml
-uses: ./.github/workflows/build.yml
+jobs:
+  publish:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
+    with:
+      release_branch: latest
+      dist_dir: dist
+      provenance: true
+      enable_gh_release: true
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
 ```
+
+### 7. How to call `docker-ops` with `image_name` and `registry_url`?
+
+`docker-ops` does not declare `registry_url`. Use `image_name` plus provider-specific inputs.
+
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+      packages: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: my-app
+      docker_login: my-user
+      docker_org: my-org
+      docker_repo: my-app
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
+```
+
+### 8. How to securely pass secret `NPM_TOKEN` to reusable workflow?
+
+Pass secrets only through `jobs.<job_id>.secrets` mapping, never through `with:`.
+
+```yaml
+jobs:
+  publish:
+    uses: my-org/my-repo/.github/workflows/publish.yml@main
+    secrets:
+      npm_token: ${{ secrets.NPM_TOKEN }}
+```
+
+For this repository specifically, `npm-release-ops` accepts only `gh_token` and `slack_webhook_url` as `workflow_call` secrets.
+
+### 9. How to pass string input `environment: production` with `workflow_call`?
+
+```yaml
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Deploying to ${{ inputs.environment }}"
+```
+
+Caller:
+
+```yaml
+jobs:
+  call-reusable:
+    uses: my-org/my-repo/.github/workflows/deploy.yml@main
+    with:
+      environment: production
+```
+
+### 10. How to consume `my-org/my-repo/.github/workflows/build.yml@main` from another workflow?
+
+```yaml
+jobs:
+  build:
+    uses: my-org/my-repo/.github/workflows/build.yml@main
+```
+
+For same-repo calls, use `uses: ./.github/workflows/build.yml`.
 
 ## Keyless Publishing
 
