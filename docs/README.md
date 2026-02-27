@@ -130,6 +130,7 @@ Always match the called workflow's declared `on.workflow_call.inputs` and `on.wo
 - `npm-release-ops` does not define `npm_token` or `package_version` in `workflow_call`.
 - `docker-ops` does not define `registry_url`; use `image_name` and registry-specific inputs (`docker_*`, `gcp_*`, `acr_*`).
 - `wp-gh-release-ops` expects `tag` (not `tag-name`).
+- `js-ops` supports build env via `build_env` (inline `KEY=VALUE`) or `build_env_file` (repository-root `.env` path); set only one.
 
 If a field is not declared in the called workflow interface, do not pass it from the caller.
 
