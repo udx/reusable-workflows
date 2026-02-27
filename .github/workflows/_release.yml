@@ -66,13 +66,13 @@ jobs:
           ref: ${{ steps.checkout_ref.outputs.value }}
 
       - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v4.1.0
+        uses: gittools/actions/gitversion/setup@v4
         with:
           versionSpec: "6.1.0"
 
       - name: Run GitVersion
         id: gitversion
-        uses: gittools/actions/gitversion/execute@v4.1.0
+        uses: gittools/actions/gitversion/execute@v4
         with:
           configFilePath: ci/git-version.yml
 

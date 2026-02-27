@@ -312,7 +312,7 @@ jobs:
           echo "Resolved outputs: concurrency_enabled='${concurrency_enabled}', concurrency_cancel_in_progress='${concurrency_cancel_in_progress}', resolved_concurrency_group='${resolved_concurrency_group}', resolved_cancel_in_progress='${resolved_cancel_in_progress}'"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.validate.outputs.node_version }}
 
@@ -574,7 +574,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.config.outputs.node_version }}
           cache: ${{ needs.config.outputs.package_manager }}
@@ -710,7 +710,7 @@ jobs:
           echo "bundle_sha256=${bundle_sha256}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload bundle artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BUNDLE_ARTIFACT_NAME }}
           if-no-files-found: error
@@ -719,14 +719,14 @@ jobs:
             ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
 
       - name: Upload release metadata artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.RELEASE_METADATA_ARTIFACT }}
           if-no-files-found: error
           path: ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
 
       - name: Upload release assets artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.RELEASE_ASSETS_ARTIFACT }}
           if-no-files-found: error
@@ -830,7 +830,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download release assets
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.config.outputs.release_assets_artifact }}
           path: ${{ runner.temp }}/release-assets
