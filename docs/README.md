@@ -127,7 +127,7 @@ jobs:
 
 Always match the called workflow's declared `on.workflow_call.inputs` and `on.workflow_call.secrets`.
 
-- `npm-release-ops` does not define `npm_token` or `package_version` in `workflow_call`.
+- `npm-release-ops` does not define `npm_token` or `package_version` in `workflow_call` and supports keyless npm publishing only.
 - `docker-ops` does not define `registry_url`; use `image_name` and registry-specific inputs (`docker_*`, `gcp_*`, `acr_*`).
 - `wp-gh-release-ops` expects `tag` (not `tag-name`).
 - `js-ops` supports build env via `build_env` (inline `KEY=VALUE`) or `build_env_file` (repository-root `.env` path); set only one.
@@ -215,7 +215,7 @@ jobs:
 
 ### 6. How to call `npm-release-ops` if you expected `npm_token` and `package_version`?
 
-`npm-release-ops` does not declare `npm_token` or `package_version` in `workflow_call`. Use declared inputs (`dist_dir`, `release_branch`, etc.). Package version is read from `package.json` in `dist_dir`.
+`npm-release-ops` does not declare `npm_token` or `package_version` in `workflow_call`. Use declared inputs (`dist_dir`, `release_branch`, etc.). Release version is derived from the repository `package.json` (no caller override input), and npm publishing is keyless (OIDC Trusted Publishing) only.
 
 ```yaml
 jobs:
@@ -253,9 +253,9 @@ jobs:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
 ```
 
-### 8. How to securely pass secret `NPM_TOKEN` to reusable workflow?
+### 8. How to securely pass secret `NPM_TOKEN` to a reusable workflow (generic pattern)?
 
-Pass secrets only through `jobs.<job_id>.secrets` mapping, never through `with:`.
+Pass secrets only through `jobs.<job_id>.secrets` mapping, never through `with:`. This applies only when the called workflow declares that secret in `on.workflow_call.secrets`.
 
 ```yaml
 jobs:
@@ -265,7 +265,7 @@ jobs:
       npm_token: ${{ secrets.NPM_TOKEN }}
 ```
 
-For this repository specifically, `npm-release-ops` accepts only `gh_token` and `slack_webhook_url` as `workflow_call` secrets.
+For this repository specifically, `npm-release-ops` supports only keyless npm publishing (OIDC Trusted Publishing). Static npm tokens (`NPM_TOKEN`/`npm_token`) are a legacy approach and are not supported or maintained by this workflow. The only declared `workflow_call` secrets are `gh_token` and `slack_webhook_url`.
 
 ### 9. How to pass string input `environment: production` with `workflow_call`?
 
@@ -306,4 +306,4 @@ For same-repo calls, use `uses: ./.github/workflows/build.yml`.
 
 ## Keyless Publishing
 
-Prefer keyless (OIDC) publishing wherever supported. Use tokens only when required (for example, installing private dependencies or when the registry does not support OIDC).
+Prefer keyless (OIDC) publishing wherever supported. In this repository, `npm-release-ops` requires keyless npm publishing and does not support static npm publish tokens.
