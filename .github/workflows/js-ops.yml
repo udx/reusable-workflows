@@ -710,7 +710,7 @@ jobs:
           echo "bundle_sha256=${bundle_sha256}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload bundle artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BUNDLE_ARTIFACT_NAME }}
           if-no-files-found: error
@@ -719,14 +719,14 @@ jobs:
             ${{ runner.temp }}/release-assets/${{ env.CHECKSUM_FILE_NAME }}
 
       - name: Upload release metadata artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.RELEASE_METADATA_ARTIFACT }}
           if-no-files-found: error
           path: ${{ runner.temp }}/release-assets/${{ env.METADATA_FILE_NAME }}
 
       - name: Upload release assets artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.RELEASE_ASSETS_ARTIFACT }}
           if-no-files-found: error
