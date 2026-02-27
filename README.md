@@ -14,7 +14,7 @@ Production-ready GitHub Actions workflows for CI/CD. Self-contained, configurabl
 
 ## Reusable Caller Essentials
 
-When calling any reusable workflow, use the canonical caller patterns in [`docs/contracts/caller-patterns.md`](docs/contracts/caller-patterns.md) and the docs index in [`docs/README.md`](docs/README.md):
+When calling any reusable workflow, use the canonical caller patterns in [`docs/caller-reference/caller-patterns.md`](docs/caller-reference/caller-patterns.md) and the docs index in [`docs/README.md`](docs/README.md):
 
 - Set permissions in the caller job (`contents`, `packages`, `id-token`) using least privilege.
 - Use clear `workflow_call` input names (prefer `lower_snake_case`, for example `deploy_environment`).
@@ -37,7 +37,7 @@ When calling any reusable workflow, use the canonical caller patterns in [`docs/
 - **Self-contained** - No internal or proprietary dependencies
 - **Configurable** - Explicit inputs and secrets
 - **Documented** - Complete setup guides and examples
-- **AI-friendly** - Structured metadata for LLM parsing
+- **Automation-friendly** - Structured documentation for consistent tooling and team usage
 
 ## Templates packaging
 

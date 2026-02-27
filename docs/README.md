@@ -11,8 +11,8 @@ Reusable workflow documentation and setup guides live in `docs/workflows/`.
 
 ## Contracts and Caller Patterns
 
-- `docs/contracts/caller-patterns.md` (canonical caller guide, contract-first rules, and common Q&A snippets)
-- Includes quick-scan core rules for humans plus prompt-shaped Q&A for LLM/agent retrieval.
+- `docs/caller-reference/caller-patterns.md` (canonical caller guide, contract-first rules, and common Q&A snippets)
+- Includes quick-scan core rules plus common Q&A examples.
 
 ## Contract-First Policy
 
