@@ -1,0 +1,16 @@
+mode: ContinuousDeployment
+
+branches:
+  master:
+    regex: ^master$
+    increment: Minor
+    source-branches: []
+
+  other:
+    regex: ^(?!master$).*$
+    increment: Patch
+    source-branches: []
+    tracks-release-branches: false
+    is-release-branch: false
+
+assembly-versioning-scheme: MajorMinorPatch

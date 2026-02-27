@@ -1,7 +1,5 @@
 # JS App Release Ops Workflow
 
-<!-- short: Build, verify, and optionally release immutable Next.js standalone bundles to GitHub Releases -->
-
 Reusable workflow for Next.js applications.
 
 It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows. It also supports reusable input-driven concurrency controls so callers can choose queue/cancel behavior without duplicating `concurrency` blocks.
@@ -31,6 +29,7 @@ jobs:
 - Ensures package metadata exists (`name`, `version`) and `scripts.build` is present
 - Resolves package-manager commands once (install/build/lint/typecheck/test/scan), with package manager auto-detection when input is omitted
 - Detects available optional scripts (`lint`, `typecheck`, `test`, `scan`)
+- Parses and validates optional build env settings from either `build_env` (inline) or `build_env_file` (repo file), then passes resolved entries to `build-and-scan`
 - Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
 - Resolves concurrency behavior (`concurrency_enabled`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
 - Emits concise config summary with high-signal values (app/version/branch/release decision/checks/concurrency/artifact)
@@ -42,7 +41,7 @@ jobs:
 - Installs dependencies using config-resolved command
 - Applies config-resolved job concurrency policy
 - Runs `lint`, `typecheck`, `test`, and `scan` only when each script exists in `package.json`
-- Builds production app (`NODE_ENV=production`)
+- Builds app with config-resolved env vars; defaults `NODE_ENV=production` when not provided
 - Packages `.next/standalone`, `.next/static`, and `public` into `tar.gz`
 - Produces SHA-256 checksum
 - Generates `release.json`
@@ -69,9 +68,19 @@ jobs:
 | `working_directory` | Directory containing `package.json`           | `.`     | |
 | `node_version`      | Node.js version                               | `24`    | |
 | `package_manager`   | Package manager (`npm` or `yarn`). If empty, auto-detected from `packageManager` field and lockfiles | `""` | |
+| `build_env`         | Optional newline-delimited `KEY=VALUE` build env entries. Keys must match `[A-Za-z_][A-Za-z0-9_]*`. | `""` | |
+| `build_env_file`    | Optional repository-root-relative path to `.env`-style build env file. | `""` | |
 | `release_branch`    | Branch that enables GitHub Release publishing. Set `""` to disable publishing (verify-only) | `latest` | |
 | `concurrency_enabled` | Enable `build-and-scan` job concurrency behavior | `true` | |
 | `concurrency_cancel_in_progress` | Whether to cancel in-progress runs in the same concurrency group | `true` | |
+
+Build env notes:
+
+- Format is newline-delimited `KEY=VALUE` text (blank lines allowed).
+- `.env` file mode supports comment lines (`# ...`) and optional `export KEY=VALUE`.
+- Set only one of `build_env` or `build_env_file`.
+- Values are not printed in logs; only key names are summarized.
+- `NODE_ENV` defaults to `production` unless explicitly overridden.
 
 ## Secrets
 
@@ -126,8 +135,21 @@ jobs:
       working_directory: apps/web
       node_version: "24"
       package_manager: yarn
+      build_env: |
+        NEXT_TELEMETRY_DISABLED=1
+        NODE_OPTIONS=--max-old-space-size=4096
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
+```
+
+### Build Env from File
+
+```yaml
+jobs:
+  configured-release:
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      build_env_file: apps/web/.env.build
 ```
 
 ### Verify-Only (all pushes/PRs, no GitHub Release publish)

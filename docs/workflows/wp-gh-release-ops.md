@@ -1,12 +1,11 @@
 # Publish WP Plugin Release on GitHub Workflow
-<!-- short: WordPress plugin release automation -->
 
 Reusable workflow for generating and publishing WordPress plugin release on GitHub.
 
 ## Features
 
-- Cleanup files, prohibited by WordPress Plugin directory
-- Parse changelog from changes.md depending on the version
+- Cleanup files prohibited by the WordPress Plugin Directory
+- Parse changelog entries from `changes.md` for the target version
 - SBOM generation
 
 ## Quick Start

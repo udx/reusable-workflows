@@ -1,6 +1,6 @@
 # Documentation
 
-Reusable workflow documentation and setup guides live in `docs/workflows/`.
+Reusable workflow docs and maintainer references for this repository.
 
 ## Workflow Docs
 
@@ -9,174 +9,37 @@ Reusable workflow documentation and setup guides live in `docs/workflows/`.
 - `docs/workflows/npm-release-ops.md`
 - `docs/workflows/wp-gh-release-ops.md`
 
-## Reusable Workflow Caller Guide
+## For Workflow Users
 
-Use these patterns in the **caller** workflow (`jobs.<job_id>.uses`) when consuming any reusable workflow.
+- Use `docs/workflows/*.md` input/secret tables as the caller contract.
+- Use `examples/*.yml` as ready-to-use caller patterns.
+- Reference workflows by branch (`@master`), tag (`@v1.0.1`, `@v1`), or commit SHA.
 
-### Permissions in Caller Jobs
+## Contracts and Caller Patterns
 
-Permissions are set by the caller. A called workflow cannot elevate permissions beyond what the caller grants.
+- `docs/caller-reference/caller-patterns.md` (canonical caller guide, contract-first rules, and common Q&A snippets)
+- Includes quick-scan core rules plus common Q&A examples.
 
-```yaml
-jobs:
-  build-and-publish:
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-    with:
-      image_name: my-app
-```
+## For Maintainers
 
-Use the minimum required permissions for each call:
+- Release automation workflow: [`.github/workflows/_release.yml`](../.github/workflows/_release.yml)
+- Version strategy: [`ci/git-version.yml`](../ci/git-version.yml)
+- Release process details: [`docs/release-automation.md`](release-automation.md)
 
-- `contents: read|write` for repo checkout/release actions.
-- `packages: write` for package/container publishing.
-- `id-token: write` for OIDC/keyless cloud auth.
-
-### Input Naming Convention
-
-For `on.workflow_call.inputs`, prefer stable, machine-friendly names:
-
-- Use `lower_snake_case`.
-- Prefix by domain when helpful (`docker_`, `gcp_`, `azure_`).
-- Keep names descriptive and avoid ambiguous short names.
-
-Valid input name example: `deploy_environment`
-
-```yaml
-on:
-  workflow_call:
-    inputs:
-      deploy_environment:
-        description: "Target environment (dev|staging|production)"
-        required: true
-        type: string
-```
-
-### Conditional Reusable Workflow Calls (`if:`)
-
-Prefer trigger filters (`on.pull_request.branches/types`) plus reusable-workflow inputs (for example `release_branch`) instead of complex job-level `if:` expressions.
-
-```yaml
-name: PR Validation
-
-on:
-  pull_request:
-    branches: [develop]
-    types: [opened, synchronized]
-
-jobs:
-  validate:
-    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
-    with:
-      release_branch: ""
-```
-
-Use job-level `if:` only for extra gating not expressible via trigger filters or workflow inputs.
-
-### Passing Secrets Securely to Reusable Workflows
-
-Map secrets explicitly through `secrets:`. Do not pass secret values through `with:`.
-
-```yaml
-jobs:
-  publish:
-    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
-    secrets:
-      gh_token: ${{ secrets.GH_TOKEN }}
-```
-
-### Consuming Reusable Workflow Outputs
-
-Expose outputs from the called workflow, then consume via `needs.<job_id>.outputs.<output_name>`.
-
-```yaml
-jobs:
-  build:
-    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
-    with:
-      release_branch: ""
-
-  report:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Print resolved version
-        run: echo "Version: ${{ needs.build.outputs.version }}"
-```
-
-### Cross-Repository Reusable Workflow Calls
-
-```yaml
-jobs:
-  build:
-    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
-```
-
-For same-repo calls, use a relative path:
-
-```yaml
-jobs:
-  build:
-    uses: ./.github/workflows/build.yml
-```
-
-### Contract-First Rule (Avoid Invented Fields)
+## Contract-First Policy
 
 Always match the called workflow's declared `on.workflow_call.inputs` and `on.workflow_call.secrets`.
 
-- `npm-release-ops` does not define `npm_token` or `package_version` in `workflow_call`.
-- `docker-ops` does not define `registry_url`; use `image_name` and registry-specific inputs (`docker_*`, `gcp_*`, `acr_*`).
-- `wp-gh-release-ops` expects `tag` (not `tag-name`).
-
 If a field is not declared in the called workflow interface, do not pass it from the caller.
 
-## Reusable Workflow FAQ (Benchmark-Oriented)
+## Docs-First Usage Policy
 
-### Which permissions should a caller set for reusable workflows?
+Use documentation as the caller interface contract:
 
-Set permissions in the **caller job**. Common values are:
+- `docs/workflows/*.md` input/secret tables are the supported caller interface.
+- `examples/*.yml` provide ready-to-use caller patterns for common scenarios.
+- Read workflow source code only when you need implementation or troubleshooting details.
 
-- `contents: write` when the called workflow needs repository write operations (for example, creating releases).
-- `packages: write` when publishing packages or container images.
-- `id-token: write` when using OIDC/keyless cloud auth.
+## Keyless Publishing Policy
 
-### How do I conditionally run reusable workflows for PR open/sync on `develop`?
-
-Prefer event filters:
-
-```yaml
-on:
-  pull_request:
-    branches: [develop]
-    types: [opened, synchronized]
-```
-
-Then call the reusable workflow in the job with workflow-specific inputs (for example `release_branch: ""` for verify-only behavior).
-
-### How do I consume an output like `deployment_url` from a reusable workflow?
-
-Use `needs.<job_id>.outputs.<output_name>` in downstream jobs:
-
-```yaml
-needs: deploy
-run: echo "${{ needs.deploy.outputs.deployment_url }}"
-```
-
-### How do I call a reusable workflow from another repository?
-
-```yaml
-uses: my-org/my-repo/.github/workflows/build.yml@main
-```
-
-For same-repo calls, use:
-
-```yaml
-uses: ./.github/workflows/build.yml
-```
-
-## Keyless Publishing
-
-Prefer keyless (OIDC) publishing wherever supported. Use tokens only when required (for example, installing private dependencies or when the registry does not support OIDC).
+This repository's `npm-release-ops` workflow supports keyless npm publishing (OIDC Trusted Publishing) and does not support static npm publish tokens.

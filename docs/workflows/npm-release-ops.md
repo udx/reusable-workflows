@@ -1,14 +1,12 @@
 # NPM Release Workflow
 
-<!-- short: Publish npm packages with provenance and GitHub releases -->
-
 A reusable workflow to publish npm packages with security best practices, optional build/test steps (via `--if-present`), and GitHub release generation. Build/test run on every trigger; release steps run only on the configured release branch.
 
 ## Setup Guide
 
 ### 1. Keyless (OIDC) access
 
-Use npm Trusted Publishing so GitHub Actions can publish without long-lived tokens. This is the recommended default. See the npm docs for [Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) and [supported CI/CD providers](https://docs.npmjs.com/trusted-publishers#supported-cicd-providers).
+Use npm Trusted Publishing so GitHub Actions can publish without long-lived tokens. This workflow supports keyless Trusted Publishing for `npm publish` and does not support static npm publish tokens. See the npm docs for [Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) and [supported CI/CD providers](https://docs.npmjs.com/trusted-publishers#supported-cicd-providers).
 
 Steps:
 
@@ -53,6 +51,34 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 | `slack_webhook_url` | Slack: Webhook URL for notifications                            | Optional |
 | `gh_token`          | GitHub: Token override for tagging/release (defaults to `github.token`) | Optional |
 
+`npm-release-ops` does not accept an npm publish token secret (`NPM_TOKEN`/`NODE_AUTH_TOKEN`) via `workflow_call`.
+
+## Contract-First Caller Example
+
+`npm-release-ops` does not declare `npm_token` or `package_version` in `on.workflow_call`.
+
+- Use `dist_dir` to point at the directory containing `package.json`.
+- The release version is read from `package.json`.
+- Use Trusted Publishing (`id-token: write`) for `npm publish`.
+- Static npm publish tokens are a legacy approach and are not supported or maintained in this workflow.
+
+```yaml
+jobs:
+  publish:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
+    with:
+      node_version: "24"
+      release_branch: "latest"
+      dist_dir: "dist"
+      provenance: true
+      enable_gh_release: true
+    secrets:
+      gh_token: ${{ secrets.GH_TOKEN }}
+```
+
 ### When to provide `gh_token`
 
 Use a custom token if your org enforces protected tag/branch rules that the default `github.token` cannot bypass (for example, tagging requires a service account or specific allowlist).
@@ -64,5 +90,5 @@ This workflow enables **NPM Provenance** by default. This links your published p
 ### Keyless Publishing Notes
 
 - Trusted publishing uses OIDC and avoids long-lived tokens.
-- OIDC is supported for GitHub Actions (hosted runners) and GitLab.com shared runners.
+- This workflow requires GitHub-hosted runners for Trusted Publishing.
 - OIDC only applies to `npm publish`; other npm commands still require auth for private packages.

@@ -35,6 +35,32 @@ jobs:
       gh_token: ${{ secrets.GH_TOKEN }}
 
   # ===========================================================================
+  # Build Env Overrides: build-env-overrides
+  # USE CASE: Pass caller-defined build env vars to `npm run build` / `yarn build`
+  # ===========================================================================
+  build-env-overrides:
+    permissions:
+      contents: read
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
+      build_env: |
+        NEXT_TELEMETRY_DISABLED=1
+        NODE_OPTIONS=--max-old-space-size=4096
+
+  # ===========================================================================
+  # Build Env From File: build-env-from-file
+  # USE CASE: Reuse committed .env-style file for build-time env values
+  # ===========================================================================
+  build-env-from-file:
+    permissions:
+      contents: read
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@master
+    with:
+      release_branch: ""
+      build_env_file: apps/web/.env.build
+
+  # ===========================================================================
   # Verify Only + Concurrency Disabled: verify-no-concurrency
   # USE CASE: Always run checks/artifacts, never publish release, no queue/cancel
   # ===========================================================================

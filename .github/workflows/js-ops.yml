@@ -28,6 +28,16 @@ on:
         required: false
         default: ""
         type: string
+      build_env:
+        description: "Optional newline-delimited KEY=VALUE entries applied to build step."
+        required: false
+        default: ""
+        type: string
+      build_env_file:
+        description: "Optional repository-root-relative path to .env-style file applied to build step."
+        required: false
+        default: ""
+        type: string
       release_branch:
         description: "Branch name that triggers GitHub Release publishing. Set empty to disable publishing."
         required: false
@@ -95,6 +105,9 @@ jobs:
       app_name: ${{ steps.pkg.outputs.app_name }}
       node_version: ${{ steps.validate.outputs.node_version }}
       working_directory: ${{ steps.validate.outputs.working_directory }}
+      build_env_resolved: ${{ steps.build_env.outputs.build_env_resolved }}
+      build_env_keys: ${{ steps.build_env.outputs.build_env_keys }}
+      build_env_source: ${{ steps.build_env.outputs.build_env_source }}
       package_manager: ${{ steps.pkg.outputs.package_manager }}
       current_branch: ${{ steps.branches.outputs.branch_name }}
       release_branch: ${{ steps.branches.outputs.release_branch }}
@@ -140,6 +153,104 @@ jobs:
           echo "node_version=${node_version}" >> "${GITHUB_OUTPUT}"
           echo "working_directory=${wd}" >> "${GITHUB_OUTPUT}"
           echo "Resolved outputs: node_version='${node_version}', working_directory='${wd}'"
+
+      - name: Resolve build env
+        id: build_env
+        env:
+          BUILD_ENV_INPUT: ${{ inputs.build_env }}
+          BUILD_ENV_FILE_INPUT: ${{ inputs.build_env_file }}
+        run: |
+          build_env_input="${BUILD_ENV_INPUT}"
+          build_env_file_input="${BUILD_ENV_FILE_INPUT}"
+          build_env_entries=()
+          build_env_keys=()
+          build_env_source="none"
+
+          if [[ -n "${build_env_input}" && -n "${build_env_file_input}" ]]; then
+            echo "::error::Set only one of build_env or build_env_file."
+            exit 1
+          fi
+
+          parse_build_env_lines() {
+            local line_number=0
+            while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
+              line_number=$((line_number + 1))
+              line="${raw_line%$'\r'}"
+
+              if [[ -z "${line}" ]]; then
+                continue
+              fi
+
+              if [[ "${line}" =~ ^[[:space:]]*# ]]; then
+                continue
+              fi
+
+              if [[ "${line}" =~ ^[[:space:]]*export[[:space:]]+ ]]; then
+                line="${line#"${BASH_REMATCH[0]}"}"
+              fi
+
+              if [[ "${line}" != *=* ]]; then
+                echo "::error::Build env entry at line ${line_number} must be KEY=VALUE."
+                exit 1
+              fi
+
+              key="${line%%=*}"
+              value="${line#*=}"
+
+              if [[ ! "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                echo "::error::Build env key '${key}' is invalid. Use [A-Za-z_][A-Za-z0-9_]*."
+                exit 1
+              fi
+
+              build_env_entries+=("${key}=${value}")
+              build_env_keys+=("${key}")
+            done
+          }
+
+          if [[ -n "${build_env_file_input}" ]]; then
+            if [[ "${build_env_file_input}" = /* ]]; then
+              echo "::error::build_env_file must be a repository-root-relative path."
+              exit 1
+            fi
+
+            workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+            resolved_build_env_file="$(realpath -m "${GITHUB_WORKSPACE}/${build_env_file_input}")"
+            case "${resolved_build_env_file}" in
+              "${workspace_root}"/*) ;;
+              *)
+                echo "::error::build_env_file must resolve inside the checked-out repository."
+                exit 1
+                ;;
+            esac
+
+            if [[ ! -f "${resolved_build_env_file}" ]]; then
+              echo "::error::build_env_file not found: ${build_env_file_input}"
+              exit 1
+            fi
+
+            build_env_source="file:${build_env_file_input}"
+            parse_build_env_lines < "${resolved_build_env_file}"
+          elif [[ -n "${build_env_input}" ]]; then
+            build_env_source="inline"
+            parse_build_env_lines <<< "${build_env_input}"
+          fi
+
+          if [[ ${#build_env_keys[@]} -gt 0 ]]; then
+            build_env_keys_csv="$(IFS=,; echo "${build_env_keys[*]}")"
+          else
+            build_env_keys_csv="none"
+          fi
+
+          {
+            echo "build_env_resolved<<__JS_OPS_BUILD_ENV__"
+            if [[ ${#build_env_entries[@]} -gt 0 ]]; then
+              printf '%s\n' "${build_env_entries[@]}"
+            fi
+            echo "__JS_OPS_BUILD_ENV__"
+          } >> "${GITHUB_OUTPUT}"
+          echo "build_env_keys=${build_env_keys_csv}" >> "${GITHUB_OUTPUT}"
+          echo "build_env_source=${build_env_source}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved build env outputs: source='${build_env_source}', keys='${build_env_keys_csv}'"
 
       - name: Determine Branch Information
         id: branches
@@ -377,6 +488,8 @@ jobs:
           CONCURRENCY_ENABLED: ${{ steps.concurrency.outputs.concurrency_enabled }}
           RESOLVED_CONCURRENCY_GROUP: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
           RESOLVED_CANCEL_IN_PROGRESS: ${{ steps.concurrency.outputs.resolved_cancel_in_progress }}
+          BUILD_ENV_SOURCE: ${{ steps.build_env.outputs.build_env_source }}
+          BUILD_ENV_KEYS: ${{ steps.build_env.outputs.build_env_keys }}
           BUNDLE_ARTIFACT_NAME: ${{ steps.meta.outputs.bundle_artifact_name }}
         run: |
           release_decision="skip"
@@ -420,6 +533,8 @@ jobs:
             echo "- concurrency: ${concurrency_status}"
             echo "- concurrency group: ${RESOLVED_CONCURRENCY_GROUP}"
             echo "- concurrency cancel in progress: ${RESOLVED_CANCEL_IN_PROGRESS}"
+            echo "- build env source: ${BUILD_ENV_SOURCE}"
+            echo "- build env keys: ${BUILD_ENV_KEYS}"
             echo "- bundle artifact: ${BUNDLE_ARTIFACT_NAME}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -452,6 +567,8 @@ jobs:
       PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
       PACKAGE_VERSION: ${{ needs.config.outputs.package_version }}
       RELEASE_PUBLISH_ENABLED: ${{ needs.config.outputs.is_release_branch }}
+      BUILD_ENV_RESOLVED: ${{ needs.config.outputs.build_env_resolved }}
+      BUILD_ENV_KEYS: ${{ needs.config.outputs.build_env_keys }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -512,6 +629,15 @@ jobs:
           NODE_ENV: production
         run: |
           set -euo pipefail
+          while IFS= read -r line || [[ -n "${line}" ]]; do
+            if [[ -z "${line}" ]]; then
+              continue
+            fi
+            export "${line}"
+          done <<< "${BUILD_ENV_RESOLVED}"
+
+          echo "Build env keys: ${BUILD_ENV_KEYS}"
+
           bash -eo pipefail -c "${BUILD_CMD}"
 
       - name: Package bundle

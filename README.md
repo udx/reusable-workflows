@@ -12,9 +12,25 @@ Production-ready GitHub Actions workflows for CI/CD. Self-contained, configurabl
 
 **💡 Pro Tip:** Start from the examples in `examples/` and tailor inputs/secrets using the docs.
 
+## Version References
+
+When calling workflows from this repo, you can pin by:
+
+- Branch: `@master`
+- Tag: `@v1.0.1` (or moving major tag like `@v1`)
+- Commit SHA: `@<full_sha>`
+
+Example:
+
+```yaml
+jobs:
+  build:
+    uses: udx/reusable-workflows/.github/workflows/js-ops.yml@v1.0.1
+```
+
 ## Reusable Caller Essentials
 
-When calling any reusable workflow, use the caller patterns in [`docs/README.md`](docs/README.md):
+When calling any reusable workflow, use the canonical caller patterns in [`docs/caller-reference/caller-patterns.md`](docs/caller-reference/caller-patterns.md) and the docs index in [`docs/README.md`](docs/README.md):
 
 - Set permissions in the caller job (`contents`, `packages`, `id-token`) using least privilege.
 - Use clear `workflow_call` input names (prefer `lower_snake_case`, for example `deploy_environment`).
@@ -37,7 +53,7 @@ When calling any reusable workflow, use the caller patterns in [`docs/README.md`
 - **Self-contained** - No internal or proprietary dependencies
 - **Configurable** - Explicit inputs and secrets
 - **Documented** - Complete setup guides and examples
-- **AI-friendly** - Structured metadata for LLM parsing
+- **Automation-friendly** - Structured documentation for consistent tooling and team usage
 
 ## Templates packaging
 
@@ -54,12 +70,16 @@ Each template is structured as follows:
 To add a new reusable workflow:
 
 1. Create your workflow in `.github/workflows/`.
-2. Add a setup guide in `docs/` and an usage example in `examples/`.
+2. Add a setup guide in `docs/` and a usage example in `examples/`.
 3. Ensure your workflow inputs follow the standard registry-prefix naming convention in descriptions (e.g., `Docker Hub: Image Name`).
 
-### Internal Infrastructure
+### Maintainer Release Process
 
-Infrastructure workflows (tests, release automation, etc.) are marked with a `_` prefix and are intended for internal use only.
+Repository automation workflows (tests, release automation, etc.) are marked with a `_` prefix.
+
+- [`.github/workflows/_release.yml`](.github/workflows/_release.yml)
+- [`ci/git-version.yml`](ci/git-version.yml)
+- Details: [`docs/release-automation.md`](docs/release-automation.md)
 
 ## License
 
