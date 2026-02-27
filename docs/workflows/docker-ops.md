@@ -1,5 +1,4 @@
 # Docker Operations Workflow
-<!-- short: Docker image release pipeline with multi-registry support -->
 
 Build, scan, and publish Docker images to multiple registries with security scanning and SBOM generation.
 
@@ -80,7 +79,7 @@ jobs:
 
 ## Dependency & Permission Matrix
 
-This matrix maps each registry type to its required configuration for AI-assisted workflow generation:
+This matrix maps each registry type to required caller configuration:
 
 | Registry Type                | Mandatory Inputs                                                                                    | Mandatory Secrets | Required IAM Role/Permission                       |
 | ---------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------- |

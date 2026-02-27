@@ -54,7 +54,7 @@ Each template is structured as follows:
 To add a new reusable workflow:
 
 1. Create your workflow in `.github/workflows/`.
-2. Add a setup guide in `docs/` and an usage example in `examples/`.
+2. Add a setup guide in `docs/` and a usage example in `examples/`.
 3. Ensure your workflow inputs follow the standard registry-prefix naming convention in descriptions (e.g., `Docker Hub: Image Name`).
 
 ### Internal Infrastructure

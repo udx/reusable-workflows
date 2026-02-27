@@ -1,7 +1,5 @@
 # NPM Release Workflow
 
-<!-- short: Publish npm packages with provenance and GitHub releases -->
-
 A reusable workflow to publish npm packages with security best practices, optional build/test steps (via `--if-present`), and GitHub release generation. Build/test run on every trigger; release steps run only on the configured release branch.
 
 ## Setup Guide

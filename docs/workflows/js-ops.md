@@ -1,7 +1,5 @@
 # JS App Release Ops Workflow
 
-<!-- short: Build, verify, and optionally release immutable Next.js standalone bundles to GitHub Releases -->
-
 Reusable workflow for Next.js applications.
 
 It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows. It also supports reusable input-driven concurrency controls so callers can choose queue/cancel behavior without duplicating `concurrency` blocks.

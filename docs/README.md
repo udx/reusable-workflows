@@ -20,6 +20,14 @@ Always match the called workflow's declared `on.workflow_call.inputs` and `on.wo
 
 If a field is not declared in the called workflow interface, do not pass it from the caller.
 
+## Docs-First Usage Policy
+
+Use documentation as the caller interface contract:
+
+- `docs/workflows/*.md` input/secret tables are the supported caller interface.
+- `examples/*.yml` provide ready-to-use caller patterns for common scenarios.
+- Read workflow source code only when you need implementation or troubleshooting details.
+
 ## Keyless Publishing Policy
 
 This repository's `npm-release-ops` workflow supports keyless npm publishing (OIDC Trusted Publishing) and does not support static npm publish tokens.

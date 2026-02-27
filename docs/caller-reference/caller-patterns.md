@@ -10,6 +10,12 @@ Use this document when authoring or reviewing caller workflows (`jobs.<job_id>.u
 - Use `Common Caller Q&A` for ready-to-copy examples.
 - Enforce `Contract-First Rule (No Invented Fields)` against declared `workflow_call` inputs/secrets.
 
+## Source of Truth
+
+- For caller usage, treat `docs/workflows/*.md` input and secret tables as the supported interface.
+- Use `examples/*.yml` for ready-to-use templates of common calling patterns.
+- Use `.github/workflows/*.yml` source primarily for implementation details and troubleshooting.
+
 ## Core Rules
 
 ### Permissions in Caller Jobs
