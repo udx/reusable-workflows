@@ -38,6 +38,12 @@ When calling any reusable workflow, use the canonical caller patterns in [`docs/
 - Pass secrets via `jobs.<id>.secrets` mapping (for example `gh_token: ${{ secrets.GH_TOKEN }}`).
 - Consume outputs with `needs.<job_id>.outputs.<output_name>`.
 
+### Quick Caller Notes
+
+- `npm-release-ops` uses keyless npm publishing (OIDC); caller inputs are declared in docs and do not include `npm_token` or `package_version`.
+- `docker-ops` uses provider-specific declared inputs; `registry_url` is not part of this workflow interface.
+- `wp-gh-release-ops` expects `tag`; if your caller uses `tag_name`, map it to `tag`.
+
 ## Available Workflows
 
 | Workflow                                                         | Description                                                                                                          | Docs                                           | Example                                      |

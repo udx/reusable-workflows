@@ -197,7 +197,7 @@ jobs:
           echo "📋 Dockerfile path: ${{ inputs.dockerfile_path }}"
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -236,7 +236,7 @@ jobs:
 
       - name: Install GitVersion
         if: steps.check_version.outputs.use_gitversion == 'true'
-        uses: gittools/actions/gitversion/setup@v4.1.0
+        uses: gittools/actions/gitversion/setup@v4
         with:
           versionSpec: "6.1.0"
 
@@ -262,7 +262,7 @@ jobs:
       - name: Determine Version
         id: gitversion
         if: steps.check_version.outputs.use_gitversion == 'true'
-        uses: gittools/actions/gitversion/execute@v4.1.0
+        uses: gittools/actions/gitversion/execute@v4
         with:
           configFilePath: ${{ steps.store_inputs.outputs.version_config_path }}
 
@@ -605,7 +605,7 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -654,7 +654,7 @@ jobs:
           echo "✅ Trivy installed successfully"
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@v1
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
@@ -712,7 +712,7 @@ jobs:
           sarif_file: "trivy-results.sarif"
 
       - name: Upload SBOM Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: env.ENABLE_SBOM == 'true'
         with:
           name: sbom
@@ -733,13 +733,13 @@ jobs:
       ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download SBOM Artifact
         if: env.ENABLE_SBOM == 'true'
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: sbom
           path: ./
@@ -875,7 +875,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -926,7 +926,7 @@ jobs:
           touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: digests-amd64
           path: /tmp/digests/*
@@ -958,7 +958,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -1009,7 +1009,7 @@ jobs:
           touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: digests-arm64
           path: /tmp/digests/*
@@ -1066,7 +1066,7 @@ jobs:
           echo "✅ Docker Hub tags prepared: $TAGS"
 
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: digests-*
           path: /tmp/digests
@@ -1134,7 +1134,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -1253,7 +1253,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

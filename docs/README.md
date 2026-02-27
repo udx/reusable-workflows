@@ -20,6 +20,13 @@ Reusable workflow docs and maintainer references for this repository.
 - `docs/caller-reference/caller-patterns.md` (canonical caller guide, contract-first rules, and common Q&A snippets)
 - Includes quick-scan core rules plus common Q&A examples.
 
+## Quick Caller Notes
+
+- `npm-release-ops`: version is read from repository `package.json`; caller interface does not declare `npm_token` or `package_version`.
+- `docker-ops`: use declared provider inputs (`docker_*`, `gcp_*`, `acr_*`, `azure_*`); `registry_url` is not a declared input.
+- `wp-gh-release-ops`: release tag input is `tag` (map caller `tag_name` to `tag`).
+- Secret passing pattern: map via `jobs.<job_id>.secrets` (for example `npm_token: ${{ secrets.NPM_TOKEN }}`) when the called workflow declares that secret.
+
 ## For Maintainers
 
 - Release automation workflow: [`.github/workflows/_release.yml`](../.github/workflows/_release.yml)

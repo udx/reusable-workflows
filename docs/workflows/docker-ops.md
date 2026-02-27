@@ -24,6 +24,9 @@ on:
 
 jobs:
   release:
+    permissions:
+      contents: write
+      id-token: write
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: my-app
@@ -33,6 +36,23 @@ jobs:
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
 ```
+
+## Contract Clarity
+
+Use only declared `workflow_call` inputs and secrets from this workflow.
+
+- Required base input: `image_name`
+- Docker Hub publishing: `docker_login`, `docker_org`, `docker_repo` + `docker_token`
+- GCP publishing: `gcp_*` inputs (OIDC, no static key secret)
+- ACR publishing: `acr_*` + `azure_*` inputs (OIDC, no static key secret)
+
+Commonly requested, but not declared in this workflow interface:
+
+- `registry_url`
+- `dockerhub_username`
+- `ecr_region`
+
+If your caller currently uses those fields, map them to the declared inputs above before calling `docker-ops`.
 
 ## Configuration
 
@@ -76,6 +96,16 @@ jobs:
 | `slack_webhook_url` | Slack webhook URL | For Slack      |
 
 **Note:** Both GCP and Azure authentication now use OIDC/Workload Identity Federation (keyless auth). JSON key/credential authentication is no longer supported.
+
+### Caller Permissions
+
+Set permissions on the caller job that uses this reusable workflow.
+
+- `contents: write` for tag/release operations
+- `id-token: write` for GCP/Azure OIDC auth paths
+- add `packages: write` only when your surrounding caller flow publishes to GitHub Packages
+
+Called workflows cannot elevate permissions beyond caller scope.
 
 ## Dependency & Permission Matrix
 
