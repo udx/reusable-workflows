@@ -620,7 +620,7 @@ jobs:
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Test Build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
@@ -634,7 +634,7 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
       - name: Single Arch Build Load
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
@@ -901,7 +901,7 @@ jobs:
 
       - name: Push Image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
@@ -984,7 +984,7 @@ jobs:
 
       - name: Push Image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
@@ -1210,7 +1210,7 @@ jobs:
           echo "✅ GCP Tags prepared: $TAGS"
 
       - name: Push Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
@@ -1333,7 +1333,7 @@ jobs:
           echo "✅ ACR Tags prepared: $TAGS"
 
       - name: Push Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
