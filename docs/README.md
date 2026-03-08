@@ -4,6 +4,7 @@ Reusable workflow docs and maintainer references for this repository.
 
 ## Workflow Docs
 
+- `docs/workflows/context7-ops.md`
 - `docs/workflows/docker-ops.md`
 - `docs/workflows/js-ops.md`
 - `docs/workflows/npm-release-ops.md`
