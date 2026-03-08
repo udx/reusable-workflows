@@ -57,15 +57,13 @@ jobs:
           fi
           
           branch="${BRANCH_INPUT}"
-          if [[ -z "${branch}" ]]; then
-            branch="${GITHUB_REF_NAME}"
-            echo "branch empty; defaulting to current branch: ${branch}"
-          fi
+          # We don't default to GITHUB_REF_NAME here to allow Context7 
+          # to use its default branch logic if no branch is specified.
           
           echo "library_name=${lib_name}" >> "${GITHUB_OUTPUT}"
           echo "branch=${branch}" >> "${GITHUB_OUTPUT}"
           
-          echo "Resolved outputs: library_name='${lib_name}', branch='${branch}'"
+          echo "Resolved outputs: library_name='${lib_name}', branch='${branch:-<default>}'"
 
   refresh:
     name: Refresh Context7
@@ -80,13 +78,24 @@ jobs:
           LIB_NAME: ${{ needs.config.outputs.library_name }}
           BRANCH: ${{ needs.config.outputs.branch }}
         run: |
-          echo "🚢 Triggering Context7 refresh for ${LIB_NAME} (branch: ${BRANCH})..."
+          echo "🚢 Preparing Context7 refresh for ${LIB_NAME}..."
           
-          # Use -s for silent, -S for show error, -i for include headers
+          # Construct JSON payload
+          if [[ -n "${BRANCH}" ]]; then
+            echo "Branch specified: ${BRANCH}"
+            PAYLOAD=$(printf '{"libraryName": "%s", "branch": "%s"}' "${LIB_NAME}" "${BRANCH}")
+          else
+            echo "No branch specified; Context7 will use the default branch."
+            PAYLOAD=$(printf '{"libraryName": "%s"}' "${LIB_NAME}")
+          fi
+          
+          echo "Payload: ${PAYLOAD}"
+          
+          # Execute API call
           RESPONSE=$(curl -sS -i -X POST "https://context7.com/api/v1/refresh" \
             -H "Authorization: Bearer ${CONTEXT7_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "{\"libraryName\": \"${LIB_NAME}\", \"branch\": \"${BRANCH}\"}")
+            -d "${PAYLOAD}")
           
           HTTP_CODE=$(echo "${RESPONSE}" | grep "HTTP/" | awk '{print $2}' | tail -n 1)
           BODY=$(echo "${RESPONSE}" | sed '1,/^\r\{0,1\}$/d')
