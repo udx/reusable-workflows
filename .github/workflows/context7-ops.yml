@@ -1,0 +1,136 @@
+---
+name: Context7 Ops
+
+# Reusable workflow to synchronize a repository with Context7 (https://context7.com).
+# It uses the Context7 Refresh API to trigger a refresh of the library documentation.
+
+on:
+  workflow_call:
+    inputs:
+      library_name:
+        description: "Context7 Library name (e.g. /owner/repo). Defaults to /github.repository."
+        required: false
+        type: string
+        default: ""
+      branch:
+        description: "Branch to refresh. Defaults to current branch."
+        required: false
+        type: string
+        default: ""
+    secrets:
+      context7_api_key:
+        description: "Context7 API Key (ctx7sk...)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: Resolve Config
+    runs-on: ubuntu-24.04
+    outputs:
+      library_name: ${{ steps.params.outputs.library_name }}
+      branch: ${{ steps.params.outputs.branch }}
+    steps:
+      - name: Resolve Parameters
+        id: params
+        shell: bash
+        env:
+          LIBRARY_NAME_INPUT: ${{ inputs.library_name }}
+          BRANCH_INPUT: ${{ inputs.branch }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          echo "Resolving Context7 sync parameters..."
+          
+          lib_name="${LIBRARY_NAME_INPUT}"
+          if [[ -z "${lib_name}" ]]; then
+            lib_name="/${GITHUB_REPOSITORY}"
+            echo "library_name empty; defaulting to '/${GITHUB_REPOSITORY}'"
+          fi
+          
+          # Ensure library name starts with /
+          if [[ ! "${lib_name}" =~ ^/ ]]; then
+            lib_name="/${lib_name}"
+            echo "Prepending '/' to library_name: ${lib_name}"
+          fi
+          
+          branch="${BRANCH_INPUT}"
+          # We don't default to GITHUB_REF_NAME here to allow Context7 
+          # to use its default branch logic if no branch is specified.
+          
+          echo "library_name=${lib_name}" >> "${GITHUB_OUTPUT}"
+          echo "branch=${branch}" >> "${GITHUB_OUTPUT}"
+          
+          echo "Resolved outputs: library_name='${lib_name}', branch='${branch:-<default>}'"
+
+  refresh:
+    name: Refresh Context7
+    needs: config
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Call Context7 API
+        id: call_api
+        shell: bash
+        env:
+          CONTEXT7_API_KEY: ${{ secrets.context7_api_key }}
+          LIB_NAME: ${{ needs.config.outputs.library_name }}
+          BRANCH: ${{ needs.config.outputs.branch }}
+        run: |
+          echo "🚢 Preparing Context7 refresh for ${LIB_NAME}..."
+          
+          # Construct JSON payload
+          if [[ -n "${BRANCH}" ]]; then
+            echo "Branch specified: ${BRANCH}"
+            PAYLOAD=$(printf '{"libraryName": "%s", "branch": "%s"}' "${LIB_NAME}" "${BRANCH}")
+          else
+            echo "No branch specified; Context7 will use the default branch."
+            PAYLOAD=$(printf '{"libraryName": "%s"}' "${LIB_NAME}")
+          fi
+          
+          echo "Payload: ${PAYLOAD}"
+          
+          # Execute API call
+          RESPONSE=$(curl -sS -i -X POST "https://context7.com/api/v1/refresh" \
+            -H "Authorization: Bearer ${CONTEXT7_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+          
+          HTTP_CODE=$(echo "${RESPONSE}" | grep "HTTP/" | awk '{print $2}' | tail -n 1)
+          BODY=$(echo "${RESPONSE}" | sed '1,/^\r\{0,1\}$/d')
+          
+          echo "Response Body: ${BODY}"
+          echo "HTTP Code: ${HTTP_CODE}"
+          
+          if [[ "${HTTP_CODE}" -lt 200 ]] || [[ "${HTTP_CODE}" -ge 300 ]]; then
+            echo "::error::Failed to refresh Context7 library. HTTP Code: ${HTTP_CODE}. Response: ${BODY}"
+            exit 1
+          fi
+          
+          echo "✅ Successfully triggered Context7 refresh."
+
+  report:
+    name: Sync Report
+    needs: [config, refresh]
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: Execution Summary
+        shell: bash
+        env:
+          LIBRARY_NAME: ${{ needs.config.outputs.library_name }}
+          BRANCH: ${{ needs.config.outputs.branch }}
+          REFRESH_RESULT: ${{ needs.refresh.result }}
+        run: |
+          echo "Context7 Sync Summary"
+          echo "---------------------"
+          echo "Library: ${LIBRARY_NAME}"
+          echo "Branch:  ${BRANCH}"
+          echo "Result:  ${REFRESH_RESULT}"
+          
+          if [[ "${REFRESH_RESULT}" == "success" ]]; then
+            echo "✅ Sync completed successfully."
+          else
+            echo "❌ Sync failed or was cancelled."
+          fi
