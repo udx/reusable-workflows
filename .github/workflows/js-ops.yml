@@ -112,6 +112,7 @@ jobs:
       current_branch: ${{ steps.branches.outputs.branch_name }}
       release_branch: ${{ steps.branches.outputs.release_branch }}
       is_release_branch: ${{ steps.branches.outputs.is_release_branch }}
+      release_exists: ${{ steps.check_release.outputs.exists || 'false' }}
       concurrency_enabled: ${{ steps.concurrency.outputs.concurrency_enabled }}
       concurrency_cancel_in_progress: ${{ steps.concurrency.outputs.concurrency_cancel_in_progress }}
       resolved_concurrency_group: ${{ steps.concurrency.outputs.resolved_concurrency_group }}
@@ -396,6 +397,22 @@ jobs:
             console.log(`script.${name}=${scripts[name] ? 'present' : 'missing'}`);
           }
           NODE
+
+      - name: Check if release already exists
+        id: check_release
+        if: steps.branches.outputs.is_release_branch == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const version = '${{ steps.pkg.outputs.package_version }}';
+            const { data: refs } = await github.rest.git.listMatchingRefs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${version}`
+            });
+            const exists = refs.some(r => r.ref === `refs/tags/${version}`);
+            core.setOutput('exists', exists ? 'true' : 'false');
+            if (exists) core.warning(`Tag ${version} already exists. Skipping release job.`);
 
       - name: Resolve package-manager commands
         id: commands
@@ -822,13 +839,11 @@ jobs:
     if: |
       always() &&
       success() &&
-      needs.config.outputs.is_release_branch == 'true'
+      needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.release_exists == 'false'
     permissions:
       contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
       - name: Download release assets
         uses: actions/download-artifact@v8
         with:
