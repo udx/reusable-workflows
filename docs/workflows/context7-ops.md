@@ -1,7 +1,7 @@
 # Context7 Ops
 
 Reusable workflow to synchronize a repository with [Context7](https://context7.com).
-It uses the Context7 Refresh API to trigger a refresh of the library documentation.
+It uses the [Context7 Refresh API](https://context7.com/docs/api-reference/refresh/refresh-a-library) to trigger a refresh of the library documentation.
 
 ## Inputs
 

@@ -4,6 +4,8 @@ Reusable workflow docs and maintainer references for this repository.
 
 ## Workflow Docs
 
+Detailed documentation for each reusable workflow, including input/secret tables and usage notes.
+
 - `docs/workflows/context7-ops.md`
 - `docs/workflows/docker-ops.md`
 - `docs/workflows/js-ops.md`
@@ -12,42 +14,25 @@ Reusable workflow docs and maintainer references for this repository.
 
 ## For Workflow Users
 
-- Use `docs/workflows/*.md` input/secret tables as the caller contract.
-- Use `examples/*.yml` as ready-to-use caller patterns.
-- Reference workflows by branch (`@master`), tag (`@v1.0.1`, `@v1`), or commit SHA.
+- **Caller Guide**: [`docs/CALLER_GUIDE.md`](CALLER_GUIDE.md) (Canonical guide for calling workflows)
+- **Examples**: [`examples/*.yml`](../examples/) (Ready-to-use caller patterns)
 
-## Contracts and Caller Patterns
-
-- `docs/caller-reference/caller-patterns.md` (canonical caller guide, contract-first rules, and common Q&A snippets)
-- Includes quick-scan core rules plus common Q&A examples.
-
-## Quick Caller Notes
-
-- `npm-release-ops`: version is read from repository `package.json`; caller interface does not declare `npm_token` or `package_version`.
-- `docker-ops`: use declared provider inputs (`docker_*`, `gcp_*`, `acr_*`, `azure_*`); `registry_url` is not a declared input.
-- `wp-gh-release-ops`: release tag input is `tag` (map caller `tag_name` to `tag`).
-- Secret passing pattern: map via `jobs.<job_id>.secrets` (for example `npm_token: ${{ secrets.NPM_TOKEN }}`) when the called workflow declares that secret.
+### Quick Tips
+- Reference workflows by branch (`@master`), tag (`@v1.0.1`), or commit SHA.
+- Always match the called workflow's declared `inputs` and `secrets`.
+- Pass secrets via `jobs.<job_id>.secrets` (e.g., `npm_token: ${{ secrets.NPM_TOKEN }}`).
 
 ## For Maintainers
 
-- Release automation workflow: [`.github/workflows/_release.yml`](../.github/workflows/_release.yml)
-- Version strategy: [`ci/git-version.yml`](../ci/git-version.yml)
-- Release process details: [`docs/release-automation.md`](release-automation.md)
+- **Engineering Standards**: [`docs/STANDARDS.md`](STANDARDS.md) (Design principles and release automation policy)
+- **Release Workflow**: [`.github/workflows/_release.yml`](../.github/workflows/_release.yml)
+- **Version Strategy**: [`ci/git-version.yml`](../ci/git-version.yml)
 
-## Contract-First Policy
+## Project Policies
 
-Always match the called workflow's declared `on.workflow_call.inputs` and `on.workflow_call.secrets`.
+- **Contract-First**: If a field is not declared in the `workflow_call` interface, do not pass it from the caller.
+- **Keyless First**: We prioritize OIDC (Workload Identity) for GCP, Azure, and npm. Static keys are generally not supported.
+- **Docs-First**: Use the markdown documentation as the source of truth for the workflow contract.
 
-If a field is not declared in the called workflow interface, do not pass it from the caller.
-
-## Docs-First Usage Policy
-
-Use documentation as the caller interface contract:
-
-- `docs/workflows/*.md` input/secret tables are the supported caller interface.
-- `examples/*.yml` provide ready-to-use caller patterns for common scenarios.
-- Read workflow source code only when you need implementation or troubleshooting details.
-
-## Keyless Publishing Policy
-
-This repository's `npm-release-ops` workflow supports keyless npm publishing (OIDC Trusted Publishing) and does not support static npm publish tokens.
+---
+_UDX DevSecOps Team_
