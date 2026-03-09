@@ -402,9 +402,11 @@ jobs:
         id: check_release
         if: steps.branches.outputs.is_release_branch == 'true'
         uses: actions/github-script@v8
+        env:
+          PACKAGE_VERSION: ${{ steps.pkg.outputs.package_version }}
         with:
           script: |
-            const version = '${{ steps.pkg.outputs.package_version }}';
+            const version = process.env.PACKAGE_VERSION;
             const { data: refs } = await github.rest.git.listMatchingRefs({
               owner: context.repo.owner,
               repo: context.repo.repo,
