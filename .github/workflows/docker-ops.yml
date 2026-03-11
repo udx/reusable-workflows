@@ -583,140 +583,140 @@ jobs:
             echo "Event: ${{ github.event_name }} (not manual trigger). Proceeding with workflow."
           fi
 
-  build-and-scan:
-    runs-on: ubuntu-24.04
-    needs: [config, control-gate]
-    if: needs.control-gate.result == 'success' || needs.control-gate.result == 'skipped'
-    env:
-      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
-      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
-      ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
-      ENABLE_SECURITY_UPLOAD: ${{ needs.config.outputs.enable_security_upload }}
-      ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
-      DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
-      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
-      DOCKER_TOKEN: ${{ secrets.docker_token }}
-      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
-    steps:
-      # Delete huge unnecessary tools folder to save space needed for docker build
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
+  # build-and-scan:
+  #   runs-on: ubuntu-24.04
+  #   needs: [config, control-gate]
+  #   if: needs.control-gate.result == 'success' || needs.control-gate.result == 'skipped'
+  #   env:
+  #     IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+  #     DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #     BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+  #     ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
+  #     ENABLE_SECURITY_UPLOAD: ${{ needs.config.outputs.enable_security_upload }}
+  #     ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
+  #     DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
+  #     DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+  #     DOCKER_TOKEN: ${{ secrets.docker_token }}
+  #     IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+  #   steps:
+  #     # Delete huge unnecessary tools folder to save space needed for docker build
+  #     - name: Delete huge unnecessary tools folder
+  #       run: rm -rf /opt/hostedtoolcache
 
-      - name: Checkout code
-        uses: actions/checkout@v6
+  #     - name: Checkout code
+  #       uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          driver: docker-container
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v4
+  #       with:
+  #         driver: docker-container
 
-      - name: Log in to Docker Hub
-        if: env.DOCKER_HAS_CREDENTIALS == 'true'
-        uses: docker/login-action@v4
-        with:
-          username: ${{ env.DOCKER_LOGIN }}
-          password: ${{ env.DOCKER_TOKEN }}
+  #     - name: Log in to Docker Hub
+  #       if: env.DOCKER_HAS_CREDENTIALS == 'true'
+  #       uses: docker/login-action@v4
+  #       with:
+  #         username: ${{ env.DOCKER_LOGIN }}
+  #         password: ${{ env.DOCKER_TOKEN }}
 
-      - name: Test Build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
-          platforms: linux/amd64
-          push: false
-          load: false
-          no-cache: false
-          build-args: |
-            ${{ env.BUILD_ARGS }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+  #     - name: Test Build
+  #       uses: docker/build-push-action@v7
+  #       with:
+  #         context: .
+  #         file: ${{ env.DOCKERFILE_PATH }}
+  #         platforms: linux/amd64
+  #         push: false
+  #         load: false
+  #         no-cache: false
+  #         build-args: |
+  #           ${{ env.BUILD_ARGS }}
+  #         tags: |
+  #           ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
-      - name: Single Arch Build Load
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
-          platforms: linux/amd64
-          push: false
-          load: true
-          no-cache: false
-          build-args: |
-            ${{ env.BUILD_ARGS }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+  #     - name: Single Arch Build Load
+  #       uses: docker/build-push-action@v7
+  #       with:
+  #         context: .
+  #         file: ${{ env.DOCKERFILE_PATH }}
+  #         platforms: linux/amd64
+  #         push: false
+  #         load: true
+  #         no-cache: false
+  #         build-args: |
+  #           ${{ env.BUILD_ARGS }}
+  #         tags: |
+  #           ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
-      - name: Install Trivy
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
-            sudo sh -s -- -b /usr/local/bin
-          echo "✅ Trivy installed successfully"
+  #     - name: Install Trivy
+  #       run: |
+  #         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
+  #           sudo sh -s -- -b /usr/local/bin
+  #         echo "✅ Trivy installed successfully"
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
-          tool-cache: false
+  #     - name: Free Disk Space (Ubuntu)
+  #       uses: jlumbroso/free-disk-space@main
+  #       with:
+  #         # this might remove tools that are actually needed,
+  #         # if set to "true" but frees about 6 GB
+  #         tool-cache: false
 
-          # all of these default to true, but feel free to set to
-          # "false" if necessary for your workflow
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: true
+  #         # all of these default to true, but feel free to set to
+  #         # "false" if necessary for your workflow
+  #         android: true
+  #         dotnet: true
+  #         haskell: true
+  #         large-packages: false
+  #         docker-images: false
+  #         swap-storage: true
 
-      - name: Generate SBOM with Retry Logic
-        id: generate-sbom
-        if: env.ENABLE_SBOM == 'true'
-        run: |
-          export TRIVY_DISABLE_VEX_NOTICE=true
-          max_retries=5
-          attempt=1
-          success=false
-          while [ $attempt -le $max_retries ]; do
-            echo "🔄 Generating SBOM, attempt $attempt..."
-            trivy image --format spdx-json --output sbom.json ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
-            if [ $? -eq 0 ]; then
-              echo "✅ SBOM generation successful"
-              success=true
-              break
-            else
-              echo "⚠️ Retry in 60 seconds..."
-              sleep 60
-              attempt=$((attempt+1))
-            fi
-          done
-          if [ "$success" = false ]; then
-            echo "❌ SBOM generation failed after $max_retries attempts"
-            exit 1
-          fi
+  #     - name: Generate SBOM with Retry Logic
+  #       id: generate-sbom
+  #       if: env.ENABLE_SBOM == 'true'
+  #       run: |
+  #         export TRIVY_DISABLE_VEX_NOTICE=true
+  #         max_retries=5
+  #         attempt=1
+  #         success=false
+  #         while [ $attempt -le $max_retries ]; do
+  #           echo "🔄 Generating SBOM, attempt $attempt..."
+  #           trivy image --format spdx-json --output sbom.json ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+  #           if [ $? -eq 0 ]; then
+  #             echo "✅ SBOM generation successful"
+  #             success=true
+  #             break
+  #           else
+  #             echo "⚠️ Retry in 60 seconds..."
+  #             sleep 60
+  #             attempt=$((attempt+1))
+  #           fi
+  #         done
+  #         if [ "$success" = false ]; then
+  #           echo "❌ SBOM generation failed after $max_retries attempts"
+  #           exit 1
+  #         fi
 
-      - name: Scan Docker Image for Vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        if: ${{ env.ENABLE_SECURITY_SCAN != 'false' }}
-        with:
-          image-ref: "${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
-          exit-code: "0"
-          format: "sarif"
-          output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH"
+  #     - name: Scan Docker Image for Vulnerabilities
+  #       uses: aquasecurity/trivy-action@master
+  #       if: ${{ env.ENABLE_SECURITY_SCAN != 'false' }}
+  #       with:
+  #         image-ref: "${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
+  #         exit-code: "0"
+  #         format: "sarif"
+  #         output: "trivy-results.sarif"
+  #         severity: "CRITICAL,HIGH"
 
-      - name: Upload Vulnerability Scan Results
-        uses: github/codeql-action/upload-sarif@v4
-        if: ${{ env.ENABLE_SECURITY_SCAN != 'false' && env.ENABLE_SECURITY_UPLOAD != 'false' && env.IS_RELEASE_BRANCH == 'true' }}
-        with:
-          sarif_file: "trivy-results.sarif"
+  #     - name: Upload Vulnerability Scan Results
+  #       uses: github/codeql-action/upload-sarif@v4
+  #       if: ${{ env.ENABLE_SECURITY_SCAN != 'false' && env.ENABLE_SECURITY_UPLOAD != 'false' && env.IS_RELEASE_BRANCH == 'true' }}
+  #       with:
+  #         sarif_file: "trivy-results.sarif"
 
-      - name: Upload SBOM Artifact
-        uses: actions/upload-artifact@v7
-        if: env.ENABLE_SBOM == 'true'
-        with:
-          name: sbom
-          path: sbom.json
+  #     - name: Upload SBOM Artifact
+  #       uses: actions/upload-artifact@v7
+  #       if: env.ENABLE_SBOM == 'true'
+  #       with:
+  #         name: sbom
+  #         path: sbom.json
 
   github-release:
     runs-on: ubuntu-24.04
@@ -1107,11 +1107,10 @@ jobs:
 
   google-cloud-release:
     runs-on: ubuntu-24.04
-    needs: [config, build-and-scan, github-release]
+    needs: [config]
     if: |
       always() &&
       needs.config.outputs.gcp_has_credentials == 'true' &&
-      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
@@ -1213,8 +1212,24 @@ jobs:
           echo "GCP_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
           echo "✅ GCP Tags prepared: $TAGS"
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: false
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
       - name: Push Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
