@@ -559,7 +559,7 @@ jobs:
 
 
   google-cloud-release:
-    runs-on: ubuntu-24.04
+    runs-on: Docker-Site-Runner-8vCPU
     needs: [config]
     if: |
       always() &&
