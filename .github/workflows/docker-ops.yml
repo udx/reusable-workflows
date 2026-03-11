@@ -718,392 +718,392 @@ jobs:
   #         name: sbom
   #         path: sbom.json
 
-  github-release:
-    runs-on: ubuntu-24.04
-    needs: [config, build-and-scan]
-    if: |
-      always() &&
-      success() &&
-      needs.config.outputs.is_release_branch == 'true'
-    permissions:
-      contents: write
-    env:
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
-      ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # github-release:
+  #   runs-on: ubuntu-24.04
+  #   needs: [config, build-and-scan]
+  #   if: |
+  #     always() &&
+  #     success() &&
+  #     needs.config.outputs.is_release_branch == 'true'
+  #   permissions:
+  #     contents: write
+  #   env:
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #     IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+  #     ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Download SBOM Artifact
-        if: env.ENABLE_SBOM == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: sbom
-          path: ./
+  #     - name: Download SBOM Artifact
+  #       if: env.ENABLE_SBOM == 'true'
+  #       uses: actions/download-artifact@v8
+  #       with:
+  #         name: sbom
+  #         path: ./
 
-      - name: Check for changes.md
-        id: check_changelog
-        run: |
-          if [ -f "./changes.md" ]; then
-            echo "has_changelog=true" >> $GITHUB_OUTPUT
-            echo "📖 Found changes.md file"
-          else
-            echo "has_changelog=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes.md file found, will generate changelog from git history"
-          fi
+  #     - name: Check for changes.md
+  #       id: check_changelog
+  #       run: |
+  #         if [ -f "./changes.md" ]; then
+  #           echo "has_changelog=true" >> $GITHUB_OUTPUT
+  #           echo "📖 Found changes.md file"
+  #         else
+  #           echo "has_changelog=false" >> $GITHUB_OUTPUT
+  #           echo "ℹ️ No changes.md file found, will generate changelog from git history"
+  #         fi
 
-      - name: Parse Changelog from changes.md
-        id: parse_changelog
-        if: steps.check_changelog.outputs.has_changelog == 'true'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { open } = require('fs/promises');
-            const fs = require('fs');
+  #     - name: Parse Changelog from changes.md
+  #       id: parse_changelog
+  #       if: steps.check_changelog.outputs.has_changelog == 'true'
+  #       uses: actions/github-script@v8
+  #       with:
+  #         script: |
+  #           const { open } = require('fs/promises');
+  #           const fs = require('fs');
 
-            const version = '${{ env.RELEASE_VERSION }}';
-            const delimiter = '### ';
-            const file = await open('./changes.md');
+  #           const version = '${{ env.RELEASE_VERSION }}';
+  #           const delimiter = '### ';
+  #           const file = await open('./changes.md');
 
-            let description = [];
-            let found = false;
+  #           let description = [];
+  #           let found = false;
 
-            for await (let line of file.readLines()) {
-              line = line.trim();
+  #           for await (let line of file.readLines()) {
+  #             line = line.trim();
 
-              if (line.startsWith(`${delimiter}${version}`)) {
-                found = true;
-                continue;
-              }
+  #             if (line.startsWith(`${delimiter}${version}`)) {
+  #               found = true;
+  #               continue;
+  #             }
 
-              if (!found) continue;
-              if (line.startsWith(delimiter)) break;
+  #             if (!found) continue;
+  #             if (line.startsWith(delimiter)) break;
 
-              description.push(line);
-            }
+  #             description.push(line);
+  #           }
 
-            if (description.length) {
-              const content = description.join('\n');
-              fs.writeFileSync('changelog.txt', content);
-              core.setOutput('has_description', 'true');
-              console.log(`✅ Found changelog entry for version ${version}`);
-            } else {
-              core.setOutput('has_description', 'false');
-              console.log(`⚠️ No changelog entry found for version ${version}`);
-            }
+  #           if (description.length) {
+  #             const content = description.join('\n');
+  #             fs.writeFileSync('changelog.txt', content);
+  #             core.setOutput('has_description', 'true');
+  #             console.log(`✅ Found changelog entry for version ${version}`);
+  #           } else {
+  #             core.setOutput('has_description', 'false');
+  #             console.log(`⚠️ No changelog entry found for version ${version}`);
+  #           }
 
-      - name: Generate Changelog from Git History
-        id: git_changelog
-        if: steps.check_changelog.outputs.has_changelog != 'true' || steps.parse_changelog.outputs.has_description != 'true'
-        run: |
-          echo "🔄 Generating changelog from git history..."
+  #     - name: Generate Changelog from Git History
+  #       id: git_changelog
+  #       if: steps.check_changelog.outputs.has_changelog != 'true' || steps.parse_changelog.outputs.has_description != 'true'
+  #       run: |
+  #         echo "🔄 Generating changelog from git history..."
 
-          # Check if this is the first tag
-          if [ "$(git tag | wc -l)" -eq "0" ]; then
-            echo "ℹ️ This is the first tag, using all commits"
-            REFERENCE=""
-          else
-            # Get the most recent tag
-            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+  #         # Check if this is the first tag
+  #         if [ "$(git tag | wc -l)" -eq "0" ]; then
+  #           echo "ℹ️ This is the first tag, using all commits"
+  #           REFERENCE=""
+  #         else
+  #           # Get the most recent tag
+  #           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-            if [ -z "$LAST_TAG" ]; then
-              echo "ℹ️ No previous tags found, using all commits"
-              REFERENCE=""
-            else
-              echo "ℹ️ Using commits since $LAST_TAG"
-              REFERENCE=$LAST_TAG
-            fi
-          fi
+  #           if [ -z "$LAST_TAG" ]; then
+  #             echo "ℹ️ No previous tags found, using all commits"
+  #             REFERENCE=""
+  #           else
+  #             echo "ℹ️ Using commits since $LAST_TAG"
+  #             REFERENCE=$LAST_TAG
+  #           fi
+  #         fi
 
-          # Generate changelog with simple formatting - no header
-          # Get commits since last tag (just the commit message without hash)
-          # Exclude merge commits
-          git log $REFERENCE..HEAD --no-merges --pretty=format:"- %s" > changelog.txt
+  #         # Generate changelog with simple formatting - no header
+  #         # Get commits since last tag (just the commit message without hash)
+  #         # Exclude merge commits
+  #         git log $REFERENCE..HEAD --no-merges --pretty=format:"- %s" > changelog.txt
 
-          # Check if changelog is empty
-          if [ ! -s changelog.txt ]; then
-            echo "ℹ️ No changes found, adding placeholder"
-            echo "- Initial release" > changelog.txt
-          fi
+  #         # Check if changelog is empty
+  #         if [ ! -s changelog.txt ]; then
+  #           echo "ℹ️ No changes found, adding placeholder"
+  #           echo "- Initial release" > changelog.txt
+  #         fi
 
-          echo "✅ Changelog generated from git history"
+  #         echo "✅ Changelog generated from git history"
 
-      - name: Configure Git for Tagging
-        run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
+  #     - name: Configure Git for Tagging
+  #       run: |
+  #         git config --global user.email "github-actions@github.com"
+  #         git config --global user.name "GitHub Actions"
 
-      - name: Create GitHub Tag
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git tag ${{ env.RELEASE_VERSION }}
-          git push origin ${{ env.RELEASE_VERSION }}
+  #     - name: Create GitHub Tag
+  #       env:
+  #         GITHUB_TOKEN: ${{ github.token }}
+  #       run: |
+  #         git tag ${{ env.RELEASE_VERSION }}
+  #         git push origin ${{ env.RELEASE_VERSION }}
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          name: ${{ env.RELEASE_VERSION }}
-          body_path: changelog.txt
-          prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
-          files: ${{ env.ENABLE_SBOM == 'true' && 'sbom.json' || '' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+  #     - name: Create Release
+  #       uses: softprops/action-gh-release@v2
+  #       with:
+  #         tag_name: ${{ env.RELEASE_VERSION }}
+  #         name: ${{ env.RELEASE_VERSION }}
+  #         body_path: changelog.txt
+  #         prerelease: ${{ env.IS_RELEASE_BRANCH != 'true' }}
+  #         files: ${{ env.ENABLE_SBOM == 'true' && 'sbom.json' || '' }}
+  #       env:
+  #         GITHUB_TOKEN: ${{ github.token }}
 
-  build-amd64:
-    runs-on: ubuntu-24.04
-    needs: [config, github-release]
-    if: |
-      always() &&
-      success() &&
-      needs.config.outputs.docker_has_credentials == 'true' &&
-      needs.config.outputs.docker_has_publish_config == 'true' &&
-      needs.config.outputs.is_release_branch == 'true'
-    permissions:
-      contents: write
-    env:
-      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
-      DOCKER_PASSWORD: ${{ secrets.docker_token }}
-      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
-      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
-      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # build-amd64:
+  #   runs-on: ubuntu-24.04
+  #   needs: [config, github-release]
+  #   if: |
+  #     always() &&
+  #     success() &&
+  #     needs.config.outputs.docker_has_credentials == 'true' &&
+  #     needs.config.outputs.docker_has_publish_config == 'true' &&
+  #     needs.config.outputs.is_release_branch == 'true'
+  #   permissions:
+  #     contents: write
+  #   env:
+  #     DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+  #     DOCKER_PASSWORD: ${{ secrets.docker_token }}
+  #     DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+  #     DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #     DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+  #     BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          driver: docker-container
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v4
+  #       with:
+  #         driver: docker-container
 
-      - name: Log in
-        uses: docker/login-action@v4
-        with:
-          username: ${{ env.DOCKER_LOGIN }}
-          password: ${{ env.DOCKER_PASSWORD }}
+  #     - name: Log in
+  #       uses: docker/login-action@v4
+  #       with:
+  #         username: ${{ env.DOCKER_LOGIN }}
+  #         password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Validate image coordinates
-        id: validate_image
-        run: |
-          set -euo pipefail
-          # Keep Docker Hub coordinates strict to prevent unsafe injection into downstream commands.
-          [[ "${DOCKER_ORG}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid docker_org: ${DOCKER_ORG}"; exit 1; }
-          [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
-          echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
+  #     - name: Validate image coordinates
+  #       id: validate_image
+  #       run: |
+  #         set -euo pipefail
+  #         # Keep Docker Hub coordinates strict to prevent unsafe injection into downstream commands.
+  #         [[ "${DOCKER_ORG}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid docker_org: ${DOCKER_ORG}"; exit 1; }
+  #         [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
+  #         echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
 
-      - name: Push Image
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
-          # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
-          platforms: linux/amd64
-          # Push by digest (no temp arch tags) so only final manifest tags are published.
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ steps.validate_image.outputs.image_ref }}
-          sbom: true
-          provenance: true
-          no-cache: true
-          build-args: |
-            ${{ env.BUILD_ARGS }}
+  #     - name: Push Image
+  #       id: build
+  #       uses: docker/build-push-action@v7
+  #       with:
+  #         context: .
+  #         file: ${{ env.DOCKERFILE_PATH }}
+  #         # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
+  #         platforms: linux/amd64
+  #         # Push by digest (no temp arch tags) so only final manifest tags are published.
+  #         outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+  #         tags: ${{ steps.validate_image.outputs.image_ref }}
+  #         sbom: true
+  #         provenance: true
+  #         no-cache: true
+  #         build-args: |
+  #           ${{ env.BUILD_ARGS }}
 
-      - name: Export digest
-        env:
-          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
+  #     - name: Export digest
+  #       env:
+  #         BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+  #       run: |
+  #         set -euo pipefail
+  #         [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
+  #         mkdir -p /tmp/digests
+  #         touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
-      - name: Upload digest
-        uses: actions/upload-artifact@v7
-        with:
-          name: digests-amd64
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
+  #     - name: Upload digest
+  #       uses: actions/upload-artifact@v7
+  #       with:
+  #         name: digests-amd64
+  #         path: /tmp/digests/*
+  #         if-no-files-found: error
+  #         retention-days: 1
 
-      - name: Log out
-        run: docker logout
+  #     - name: Log out
+  #       run: docker logout
 
-  build-arm64:
-    # TODO: If ubuntu-24.04-arm is unavailable, set ARM64_RUNNER_LABEL to a self-hosted arm64 label.
-    runs-on: ${{ vars.ARM64_RUNNER_LABEL != '' && vars.ARM64_RUNNER_LABEL || 'ubuntu-24.04-arm' }}
-    needs: [config, github-release]
-    if: |
-      always() &&
-      success() &&
-      needs.config.outputs.docker_has_credentials == 'true' &&
-      needs.config.outputs.docker_has_publish_config == 'true' &&
-      needs.config.outputs.is_release_branch == 'true'
-    permissions:
-      contents: write
-    env:
-      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
-      DOCKER_PASSWORD: ${{ secrets.docker_token }}
-      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
-      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
-      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # build-arm64:
+  #   # TODO: If ubuntu-24.04-arm is unavailable, set ARM64_RUNNER_LABEL to a self-hosted arm64 label.
+  #   runs-on: ${{ vars.ARM64_RUNNER_LABEL != '' && vars.ARM64_RUNNER_LABEL || 'ubuntu-24.04-arm' }}
+  #   needs: [config, github-release]
+  #   if: |
+  #     always() &&
+  #     success() &&
+  #     needs.config.outputs.docker_has_credentials == 'true' &&
+  #     needs.config.outputs.docker_has_publish_config == 'true' &&
+  #     needs.config.outputs.is_release_branch == 'true'
+  #   permissions:
+  #     contents: write
+  #   env:
+  #     DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+  #     DOCKER_PASSWORD: ${{ secrets.docker_token }}
+  #     DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+  #     DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #     DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+  #     BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          driver: docker-container
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v4
+  #       with:
+  #         driver: docker-container
 
-      - name: Log in
-        uses: docker/login-action@v4
-        with:
-          username: ${{ env.DOCKER_LOGIN }}
-          password: ${{ env.DOCKER_PASSWORD }}
+  #     - name: Log in
+  #       uses: docker/login-action@v4
+  #       with:
+  #         username: ${{ env.DOCKER_LOGIN }}
+  #         password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Validate image coordinates
-        id: validate_image
-        run: |
-          set -euo pipefail
-          # Keep Docker Hub coordinates strict to prevent unsafe injection into downstream commands.
-          [[ "${DOCKER_ORG}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid docker_org: ${DOCKER_ORG}"; exit 1; }
-          [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
-          echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
+  #     - name: Validate image coordinates
+  #       id: validate_image
+  #       run: |
+  #         set -euo pipefail
+  #         # Keep Docker Hub coordinates strict to prevent unsafe injection into downstream commands.
+  #         [[ "${DOCKER_ORG}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid docker_org: ${DOCKER_ORG}"; exit 1; }
+  #         [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
+  #         echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
 
-      - name: Push Image
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
-          # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
-          platforms: linux/arm64
-          # Push by digest (no temp arch tags) so only final manifest tags are published.
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ steps.validate_image.outputs.image_ref }}
-          sbom: true
-          provenance: true
-          no-cache: true
-          build-args: |
-            ${{ env.BUILD_ARGS }}
+  #     - name: Push Image
+  #       id: build
+  #       uses: docker/build-push-action@v7
+  #       with:
+  #         context: .
+  #         file: ${{ env.DOCKERFILE_PATH }}
+  #         # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
+  #         platforms: linux/arm64
+  #         # Push by digest (no temp arch tags) so only final manifest tags are published.
+  #         outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+  #         tags: ${{ steps.validate_image.outputs.image_ref }}
+  #         sbom: true
+  #         provenance: true
+  #         no-cache: true
+  #         build-args: |
+  #           ${{ env.BUILD_ARGS }}
 
-      - name: Export digest
-        env:
-          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
+  #     - name: Export digest
+  #       env:
+  #         BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+  #       run: |
+  #         set -euo pipefail
+  #         [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
+  #         mkdir -p /tmp/digests
+  #         touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
-      - name: Upload digest
-        uses: actions/upload-artifact@v7
-        with:
-          name: digests-arm64
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
+  #     - name: Upload digest
+  #       uses: actions/upload-artifact@v7
+  #       with:
+  #         name: digests-arm64
+  #         path: /tmp/digests/*
+  #         if-no-files-found: error
+  #         retention-days: 1
 
-      - name: Log out
-        run: docker logout
+  #     - name: Log out
+  #       run: docker logout
 
-  manifest:
-    runs-on: ubuntu-24.04
-    needs: [config, github-release, build-amd64, build-arm64]
-    if: |
-      always() &&
-      success() &&
-      needs.config.outputs.docker_has_credentials == 'true' &&
-      needs.config.outputs.docker_has_publish_config == 'true' &&
-      needs.config.outputs.is_release_branch == 'true' &&
-      needs.build-amd64.result == 'success' &&
-      needs.build-arm64.result == 'success'
-    permissions:
-      contents: write
-    env:
-      DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
-      DOCKER_PASSWORD: ${{ secrets.docker_token }}
-      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
-      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          driver: docker-container
+  # manifest:
+  #   runs-on: ubuntu-24.04
+  #   needs: [config, github-release, build-amd64, build-arm64]
+  #   if: |
+  #     always() &&
+  #     success() &&
+  #     needs.config.outputs.docker_has_credentials == 'true' &&
+  #     needs.config.outputs.docker_has_publish_config == 'true' &&
+  #     needs.config.outputs.is_release_branch == 'true' &&
+  #     needs.build-amd64.result == 'success' &&
+  #     needs.build-arm64.result == 'success'
+  #   permissions:
+  #     contents: write
+  #   env:
+  #     DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
+  #     DOCKER_PASSWORD: ${{ secrets.docker_token }}
+  #     DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+  #     DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #   steps:
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v4
+  #       with:
+  #         driver: docker-container
 
-      - name: Log in
-        uses: docker/login-action@v4
-        with:
-          username: ${{ env.DOCKER_LOGIN }}
-          password: ${{ env.DOCKER_PASSWORD }}
+  #     - name: Log in
+  #       uses: docker/login-action@v4
+  #       with:
+  #         username: ${{ env.DOCKER_LOGIN }}
+  #         password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Prepare tags
-        id: prepare_tags
-        env:
-          IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
-          RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-        run: |
-          set -euo pipefail
-          echo "🔄 Preparing Docker Hub tags..."
-          [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
-          [[ "${RELEASE_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid release_version: ${RELEASE_VERSION}"; exit 1; }
-          # Keep existing release tag logic: semantic version + latest.
-          TAGS="${IMAGE_REF}:${RELEASE_VERSION},${IMAGE_REF}:latest"
-          echo "docker_tags=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "✅ Docker Hub tags prepared: $TAGS"
+  #     - name: Prepare tags
+  #       id: prepare_tags
+  #       env:
+  #         IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
+  #         RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #       run: |
+  #         set -euo pipefail
+  #         echo "🔄 Preparing Docker Hub tags..."
+  #         [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
+  #         [[ "${RELEASE_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid release_version: ${RELEASE_VERSION}"; exit 1; }
+  #         # Keep existing release tag logic: semantic version + latest.
+  #         TAGS="${IMAGE_REF}:${RELEASE_VERSION},${IMAGE_REF}:latest"
+  #         echo "docker_tags=${TAGS}" >> "$GITHUB_OUTPUT"
+  #         echo "✅ Docker Hub tags prepared: $TAGS"
 
-      - name: Download digests
-        uses: actions/download-artifact@v8
-        with:
-          pattern: digests-*
-          path: /tmp/digests
-          merge-multiple: true
+  #     - name: Download digests
+  #       uses: actions/download-artifact@v8
+  #       with:
+  #         pattern: digests-*
+  #         path: /tmp/digests
+  #         merge-multiple: true
 
-      - name: Create Multi-Arch Manifest
-        env:
-          IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
-          DOCKER_TAGS: ${{ steps.prepare_tags.outputs.docker_tags }}
-        run: |
-          set -euo pipefail
-          [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
-          # Manifest creation only combines native per-arch digests, so no QEMU and no temp arch tags are required.
-          DIGEST_SOURCES=()
-          for digest_file in /tmp/digests/*; do
-            [ -e "${digest_file}" ] || continue
-            DIGEST_VALUE="$(basename "${digest_file}")"
-            [[ "${DIGEST_VALUE}" =~ ^[a-f0-9]{64}$ ]] || { echo "::error::Invalid digest artifact: ${DIGEST_VALUE}"; exit 1; }
-            DIGEST_SOURCES+=("${IMAGE_REF}@sha256:${DIGEST_VALUE}")
-          done
-          if [ ${#DIGEST_SOURCES[@]} -eq 0 ]; then
-            echo "::error::No build digests found for manifest creation."
-            exit 1
-          fi
+  #     - name: Create Multi-Arch Manifest
+  #       env:
+  #         IMAGE_REF: ${{ needs.config.outputs.docker_org }}/${{ needs.config.outputs.docker_repo }}
+  #         DOCKER_TAGS: ${{ steps.prepare_tags.outputs.docker_tags }}
+  #       run: |
+  #         set -euo pipefail
+  #         [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
+  #         # Manifest creation only combines native per-arch digests, so no QEMU and no temp arch tags are required.
+  #         DIGEST_SOURCES=()
+  #         for digest_file in /tmp/digests/*; do
+  #           [ -e "${digest_file}" ] || continue
+  #           DIGEST_VALUE="$(basename "${digest_file}")"
+  #           [[ "${DIGEST_VALUE}" =~ ^[a-f0-9]{64}$ ]] || { echo "::error::Invalid digest artifact: ${DIGEST_VALUE}"; exit 1; }
+  #           DIGEST_SOURCES+=("${IMAGE_REF}@sha256:${DIGEST_VALUE}")
+  #         done
+  #         if [ ${#DIGEST_SOURCES[@]} -eq 0 ]; then
+  #           echo "::error::No build digests found for manifest creation."
+  #           exit 1
+  #         fi
 
-          IFS=',' read -ra TAG_ARRAY <<< "${DOCKER_TAGS}"
-          for tag in "${TAG_ARRAY[@]}"; do
-            [[ "${tag}" =~ ^[a-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid Docker tag: ${tag}"; exit 1; }
-            echo "🔄 Creating multi-arch manifest for ${tag}"
-            docker buildx imagetools create \
-              --tag "${tag}" \
-              "${DIGEST_SOURCES[@]}"
-            docker buildx imagetools inspect "${tag}"
-          done
+  #         IFS=',' read -ra TAG_ARRAY <<< "${DOCKER_TAGS}"
+  #         for tag in "${TAG_ARRAY[@]}"; do
+  #           [[ "${tag}" =~ ^[a-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid Docker tag: ${tag}"; exit 1; }
+  #           echo "🔄 Creating multi-arch manifest for ${tag}"
+  #           docker buildx imagetools create \
+  #             --tag "${tag}" \
+  #             "${DIGEST_SOURCES[@]}"
+  #           docker buildx imagetools inspect "${tag}"
+  #         done
 
-      - name: Log out
-        run: docker logout
+  #     - name: Log out
+  #       run: docker logout
 
   google-cloud-release:
     runs-on: ubuntu-24.04
@@ -1243,224 +1243,224 @@ jobs:
       - name: Log out from Google Cloud
         run: docker logout
 
-  azure-container-registry-release:
-    runs-on: ubuntu-24.04
-    needs: [config, build-and-scan, github-release]
-    if: |
-      always() &&
-      needs.config.outputs.acr_has_credentials == 'true' &&
-      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
-      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      BUILD_PLATFORM: "amd64"
-      DOCKER_USERNAME: ${{ needs.config.outputs.docker_login }}
-      DOCKER_PASSWORD: ${{ secrets.docker_token }}
-      DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
-      ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
-      ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
-      AZURE_CLIENT_ID: ${{ needs.config.outputs.azure_client_id }}
-      AZURE_TENANT_ID: ${{ needs.config.outputs.azure_tenant_id }}
-      AZURE_SUBSCRIPTION_ID: ${{ needs.config.outputs.azure_subscription_id }}
-      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
-      DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
-      IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
-      BUILD_ARGS: ${{ needs.config.outputs.build_args }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # azure-container-registry-release:
+  #   runs-on: ubuntu-24.04
+  #   needs: [config, build-and-scan, github-release]
+  #   if: |
+  #     always() &&
+  #     needs.config.outputs.acr_has_credentials == 'true' &&
+  #     (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
+  #     (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #   env:
+  #     BUILD_PLATFORM: "amd64"
+  #     DOCKER_USERNAME: ${{ needs.config.outputs.docker_login }}
+  #     DOCKER_PASSWORD: ${{ secrets.docker_token }}
+  #     DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
+  #     ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
+  #     ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
+  #     AZURE_CLIENT_ID: ${{ needs.config.outputs.azure_client_id }}
+  #     AZURE_TENANT_ID: ${{ needs.config.outputs.azure_tenant_id }}
+  #     AZURE_SUBSCRIPTION_ID: ${{ needs.config.outputs.azure_subscription_id }}
+  #     IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+  #     DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #     CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
+  #     IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
+  #     BUILD_ARGS: ${{ needs.config.outputs.build_args }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Log in to Docker Hub
-        if: env.DOCKER_HAS_CREDENTIALS == 'true'
-        uses: docker/login-action@v4
-        with:
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_PASSWORD }}
+  #     - name: Log in to Docker Hub
+  #       if: env.DOCKER_HAS_CREDENTIALS == 'true'
+  #       uses: docker/login-action@v4
+  #       with:
+  #         username: ${{ env.DOCKER_USERNAME }}
+  #         password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Authenticate with Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+  #     - name: Authenticate with Azure
+  #       uses: azure/login@v2
+  #       with:
+  #         client-id: ${{ env.AZURE_CLIENT_ID }}
+  #         tenant-id: ${{ env.AZURE_TENANT_ID }}
+  #         subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Log in to Azure Container Registry
-        run: |
-          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
-          TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
-          echo "${TOKEN}" | docker login ${{ env.ACR_REGISTRY }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
+  #     - name: Log in to Azure Container Registry
+  #       run: |
+  #         REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+  #         TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
+  #         echo "${TOKEN}" | docker login ${{ env.ACR_REGISTRY }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
-      # Create safe branch name for feature branches
-      - name: Create safe branch name
-        if: env.IS_RELEASE_BRANCH == 'false'
-        run: |
-          # Create safe branch name by replacing slashes with dashes
-          SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
-          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+  #     # Create safe branch name for feature branches
+  #     - name: Create safe branch name
+  #       if: env.IS_RELEASE_BRANCH == 'false'
+  #       run: |
+  #         # Create safe branch name by replacing slashes with dashes
+  #         SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
+  #         echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
 
-      # Delete existing images to prevent orphaned resources
-      - name: Delete existing images in ACR
-        if: env.IS_RELEASE_BRANCH == 'false'
-        # Skip for production builds which use semantic versioning
-        run: |
-          echo "🔄 Checking for existing feature branch images..."
-          # Define variables
-          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
-          REPOSITORY="${{ env.ACR_REPOSITORY }}"
-          TAG="${{ env.SAFE_BRANCH_NAME }}"
+  #     # Delete existing images to prevent orphaned resources
+  #     - name: Delete existing images in ACR
+  #       if: env.IS_RELEASE_BRANCH == 'false'
+  #       # Skip for production builds which use semantic versioning
+  #       run: |
+  #         echo "🔄 Checking for existing feature branch images..."
+  #         # Define variables
+  #         REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+  #         REPOSITORY="${{ env.ACR_REPOSITORY }}"
+  #         TAG="${{ env.SAFE_BRANCH_NAME }}"
 
-          echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
+  #         echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
 
-          # Check if the tag exists
-          TAG_EXISTS=$(az acr repository show-tags --name ${REGISTRY_NAME} --repository ${REPOSITORY} --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
+  #         # Check if the tag exists
+  #         TAG_EXISTS=$(az acr repository show-tags --name ${REGISTRY_NAME} --repository ${REPOSITORY} --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
 
-          if [ -n "${TAG_EXISTS}" ]; then
-            echo "ℹ️ Found existing image with tag: ${TAG}"
+  #         if [ -n "${TAG_EXISTS}" ]; then
+  #           echo "ℹ️ Found existing image with tag: ${TAG}"
 
-            # Delete the image by tag
-            echo "🗑️ Deleting previous image by tag..."
-            az acr repository delete --name ${REGISTRY_NAME} --image ${REPOSITORY}:${TAG} --yes
+  #           # Delete the image by tag
+  #           echo "🗑️ Deleting previous image by tag..."
+  #           az acr repository delete --name ${REGISTRY_NAME} --image ${REPOSITORY}:${TAG} --yes
 
-            echo "✅ Previous image deletion completed"
-          else
-            echo "ℹ️ No previous image found with tag ${TAG}"
-          fi
+  #           echo "✅ Previous image deletion completed"
+  #         else
+  #           echo "ℹ️ No previous image found with tag ${TAG}"
+  #         fi
 
-      # Prepare ACR Docker tags based on branch and settings
-      - name: Prepare ACR Docker tags
-        id: prepare_acr_tags
-        run: |
-          echo "🔄 Preparing ACR Docker tags..."
-          # Set tags based on branch
-          if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
-            # Production release - use semantic version and latest tag
-            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.RELEASE_VERSION }},${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:latest"
-            echo "ℹ️ Production release: Adding both version and latest tags"
-          else
-            # Feature branch build - only use branch name tag
-            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.SAFE_BRANCH_NAME }}"
-            echo "ℹ️ Feature branch build: Using branch name tag only"
-          fi
+  #     # Prepare ACR Docker tags based on branch and settings
+  #     - name: Prepare ACR Docker tags
+  #       id: prepare_acr_tags
+  #       run: |
+  #         echo "🔄 Preparing ACR Docker tags..."
+  #         # Set tags based on branch
+  #         if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
+  #           # Production release - use semantic version and latest tag
+  #           TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.RELEASE_VERSION }},${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:latest"
+  #           echo "ℹ️ Production release: Adding both version and latest tags"
+  #         else
+  #           # Feature branch build - only use branch name tag
+  #           TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.SAFE_BRANCH_NAME }}"
+  #           echo "ℹ️ Feature branch build: Using branch name tag only"
+  #         fi
 
-          echo "ACR_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
-          echo "✅ ACR Tags prepared: $TAGS"
+  #         echo "ACR_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+  #         echo "✅ ACR Tags prepared: $TAGS"
 
-      - name: Push Image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
-          platforms: linux/${{ env.BUILD_PLATFORM }}
-          push: true
-          no-cache: true
-          build-args: |
-            ${{ env.BUILD_ARGS }}
-          tags: ${{ env.ACR_DOCKER_TAGS }}
+  #     - name: Push Image
+  #       uses: docker/build-push-action@v7
+  #       with:
+  #         context: .
+  #         file: ${{ env.DOCKERFILE_PATH }}
+  #         platforms: linux/${{ env.BUILD_PLATFORM }}
+  #         push: true
+  #         no-cache: true
+  #         build-args: |
+  #           ${{ env.BUILD_ARGS }}
+  #         tags: ${{ env.ACR_DOCKER_TAGS }}
 
-      - name: Log out from Azure Container Registry
-        run: docker logout ${{ env.ACR_REGISTRY }}
+  #     - name: Log out from Azure Container Registry
+  #       run: docker logout ${{ env.ACR_REGISTRY }}
 
-  notify:
-    runs-on: ubuntu-24.04
-    needs:
-      [
-        config,
-        github-release,
-        manifest,
-        google-cloud-release,
-        azure-container-registry-release,
-      ]
-    if: |
-      always() && 
-      needs.config.outputs.has_slack_webhook == 'true' &&
-      needs.github-release.result == 'success' &&
-      (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') &&
-      (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
-      (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
-      needs.config.outputs.is_release_branch == 'true'
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
-      RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
-      IMAGE_NAME: ${{ needs.config.outputs.image_name }}
-      GITHUB_REPO: ${{ github.repository }}
-      DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
-      DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
-      GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
-      GCP_REGION: ${{ needs.config.outputs.gcp_region }}
-      GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
-      ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
-      ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
-      DOCKER_ENABLED: ${{ needs.config.outputs.docker_has_publish_config }}
-      GCP_ENABLED: ${{ needs.config.outputs.gcp_has_credentials }}
-      ACR_ENABLED: ${{ needs.config.outputs.acr_has_credentials }}
-    steps:
-      - name: Generate notification message
-        id: generate_message
-        run: |
-          echo "🔄 Generating notification message..."
+  # notify:
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     [
+  #       config,
+  #       github-release,
+  #       manifest,
+  #       google-cloud-release,
+  #       azure-container-registry-release,
+  #     ]
+  #   if: |
+  #     always() && 
+  #     needs.config.outputs.has_slack_webhook == 'true' &&
+  #     needs.github-release.result == 'success' &&
+  #     (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') &&
+  #     (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
+  #     (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
+  #     needs.config.outputs.is_release_branch == 'true'
+  #   env:
+  #     SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+  #     RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
+  #     IMAGE_NAME: ${{ needs.config.outputs.image_name }}
+  #     GITHUB_REPO: ${{ github.repository }}
+  #     DOCKER_ORG: ${{ needs.config.outputs.docker_org }}
+  #     DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
+  #     GCP_PROJECT_ID: ${{ needs.config.outputs.gcp_project_id }}
+  #     GCP_REGION: ${{ needs.config.outputs.gcp_region }}
+  #     GCP_REPO: ${{ needs.config.outputs.gcp_repo }}
+  #     ACR_REGISTRY: ${{ needs.config.outputs.acr_registry }}
+  #     ACR_REPOSITORY: ${{ needs.config.outputs.acr_repository }}
+  #     DOCKER_ENABLED: ${{ needs.config.outputs.docker_has_publish_config }}
+  #     GCP_ENABLED: ${{ needs.config.outputs.gcp_has_credentials }}
+  #     ACR_ENABLED: ${{ needs.config.outputs.acr_has_credentials }}
+  #   steps:
+  #     - name: Generate notification message
+  #       id: generate_message
+  #       run: |
+  #         echo "🔄 Generating notification message..."
 
-          # Create simplified JSON payload for Slack notification using a more reliable approach
-          cat << EOF > payload.json
-          {
-            "text": "🚀 New release of ${IMAGE_NAME} v${RELEASE_VERSION} is available!",
-            "blocks": [
-              {
-                "type": "header",
-                "text": {
-                  "type": "plain_text",
-                  "text": "🚀 New Release Available"
-                }
-              },
-              {
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*${IMAGE_NAME}* version *${RELEASE_VERSION}* has been released."
-                }
-              },
-              {
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*Release Links:*\n• <https://github.com/${GITHUB_REPO}/releases/tag/${RELEASE_VERSION}|GitHub Release>"
-                }
-              }
-            ]
-          }
-          EOF
+  #         # Create simplified JSON payload for Slack notification using a more reliable approach
+  #         cat << EOF > payload.json
+  #         {
+  #           "text": "🚀 New release of ${IMAGE_NAME} v${RELEASE_VERSION} is available!",
+  #           "blocks": [
+  #             {
+  #               "type": "header",
+  #               "text": {
+  #                 "type": "plain_text",
+  #                 "text": "🚀 New Release Available"
+  #               }
+  #             },
+  #             {
+  #               "type": "section",
+  #               "text": {
+  #                 "type": "mrkdwn",
+  #                 "text": "*${IMAGE_NAME}* version *${RELEASE_VERSION}* has been released."
+  #               }
+  #             },
+  #             {
+  #               "type": "section",
+  #               "text": {
+  #                 "type": "mrkdwn",
+  #                 "text": "*Release Links:*\n• <https://github.com/${GITHUB_REPO}/releases/tag/${RELEASE_VERSION}|GitHub Release>"
+  #               }
+  #             }
+  #           ]
+  #         }
+  #         EOF
 
-          # Add Docker Hub link if enabled
-          if [ "$DOCKER_ENABLED" = "true" ]; then
-            jq '.blocks[2].text.text += "\n• <https://hub.docker.com/r/'"$DOCKER_ORG"'/'"$DOCKER_REPO"'/tags|Docker Hub Image>"' payload.json > payload.tmp && mv payload.tmp payload.json
-          fi
+  #         # Add Docker Hub link if enabled
+  #         if [ "$DOCKER_ENABLED" = "true" ]; then
+  #           jq '.blocks[2].text.text += "\n• <https://hub.docker.com/r/'"$DOCKER_ORG"'/'"$DOCKER_REPO"'/tags|Docker Hub Image>"' payload.json > payload.tmp && mv payload.tmp payload.json
+  #         fi
 
-          # Add GCP link if enabled
-          if [ "$GCP_ENABLED" = "true" ]; then
-            jq '.blocks[2].text.text += "\n• <https://console.cloud.google.com/artifacts/docker/'"$GCP_PROJECT_ID"'/'"$GCP_REGION"'/'"$GCP_REPO"'/'"$IMAGE_NAME"'|Google Cloud Artifact Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
-          fi
+  #         # Add GCP link if enabled
+  #         if [ "$GCP_ENABLED" = "true" ]; then
+  #           jq '.blocks[2].text.text += "\n• <https://console.cloud.google.com/artifacts/docker/'"$GCP_PROJECT_ID"'/'"$GCP_REGION"'/'"$GCP_REPO"'/'"$IMAGE_NAME"'|Google Cloud Artifact Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
+  #         fi
 
-          # Add ACR link if enabled
-          if [ "$ACR_ENABLED" = "true" ]; then
-            REGISTRY_NAME=$(echo "$ACR_REGISTRY" | cut -d'.' -f1)
-            jq '.blocks[2].text.text += "\n• <https://portal.azure.com/#view/Microsoft_Azure_ContainerRegistries/RepositoryBlade/id/%2Fsubscriptions%2F~%2FresourceGroups%2F~%2Fproviders%2FMicrosoft.ContainerRegistry%2Fregistries%2F'"$REGISTRY_NAME"'/repository/'"$ACR_REPOSITORY"'|Azure Container Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
-          fi
+  #         # Add ACR link if enabled
+  #         if [ "$ACR_ENABLED" = "true" ]; then
+  #           REGISTRY_NAME=$(echo "$ACR_REGISTRY" | cut -d'.' -f1)
+  #           jq '.blocks[2].text.text += "\n• <https://portal.azure.com/#view/Microsoft_Azure_ContainerRegistries/RepositoryBlade/id/%2Fsubscriptions%2F~%2FresourceGroups%2F~%2Fproviders%2FMicrosoft.ContainerRegistry%2Fregistries%2F'"$REGISTRY_NAME"'/repository/'"$ACR_REPOSITORY"'|Azure Container Registry>"' payload.json > payload.tmp && mv payload.tmp payload.json
+  #         fi
 
-          # Store payload in output
-          echo "payload<<EOF" >> $GITHUB_OUTPUT
-          cat payload.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+  #         # Store payload in output
+  #         echo "payload<<EOF" >> $GITHUB_OUTPUT
+  #         cat payload.json >> $GITHUB_OUTPUT
+  #         echo "EOF" >> $GITHUB_OUTPUT
 
-          echo "✅ Notification message generated"
+  #         echo "✅ Notification message generated"
 
-      - name: Send notification
-        uses: slackapi/slack-github-action@v2
-        with:
-          payload: ${{ steps.generate_message.outputs.payload }}
-          webhook: ${{ env.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
+  #     - name: Send notification
+  #       uses: slackapi/slack-github-action@v2
+  #       with:
+  #         payload: ${{ steps.generate_message.outputs.payload }}
+  #         webhook: ${{ env.SLACK_WEBHOOK_URL }}
+  #         webhook-type: incoming-webhook
