@@ -1213,22 +1213,6 @@ jobs:
           echo "GCP_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
           echo "✅ GCP Tags prepared: $TAGS"
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
-          tool-cache: false
-
-          # all of these default to true, but feel free to set to
-          # "false" if necessary for your workflow
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: true
-
       - name: Push Image
         uses: docker/build-push-action@v7
         with:
