@@ -1106,7 +1106,7 @@ jobs:
         run: docker logout
 
   google-cloud-release:
-    runs-on: Docker-Site-Runner-8vCPU
+    runs-on: Docker-Site-Runner-4vCPU
     needs: [config, build-and-scan, github-release]
     if: |
       always() &&
