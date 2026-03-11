@@ -1133,6 +1133,10 @@ jobs:
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
+      # Delete huge unnecessary tools folder to save space needed for docker build
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
       - name: Checkout code
         uses: actions/checkout@v6
         with:
@@ -1208,6 +1212,22 @@ jobs:
 
           echo "GCP_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
           echo "✅ GCP Tags prepared: $TAGS"
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: true
 
       - name: Push Image
         uses: docker/build-push-action@v7
