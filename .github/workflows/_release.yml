@@ -68,7 +68,7 @@ jobs:
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v4
         with:
-          versionSpec: "6.1.0"
+          versionSpec: "6.5.0"
 
       - name: Run GitVersion
         id: gitversion
