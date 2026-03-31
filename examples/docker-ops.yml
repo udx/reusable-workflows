@@ -14,6 +14,8 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      # Set to "false" for repos that need to avoid GitHub Actions cache usage.
+      enable_cache: "true"
       docker_login: ${{ vars.DOCKER_USERNAME }}
       docker_org: ${{ vars.DOCKER_ORG }}
       docker_repo: ${{ vars.DOCKER_REPO }}
@@ -31,6 +33,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      enable_cache: "true"
       gcp_region: ${{ vars.GCP_REGION }}
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gcp_repo: ${{ vars.GCP_REPO }}
@@ -48,6 +51,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      enable_cache: "true"
       acr_registry: ${{ vars.ACR_REGISTRY }}
       acr_repository: ${{ vars.ACR_REPOSITORY }}
       azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
@@ -65,6 +69,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      enable_cache: "true"
       # Docker Hub
       docker_login: ${{ vars.DOCKER_USERNAME }}
       docker_org: ${{ vars.DOCKER_ORG }}
