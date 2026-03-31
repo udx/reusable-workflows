@@ -88,6 +88,11 @@ on:
         required: false
         default: "true"
         type: string
+      enable_cache:
+        description: "Whether to allow GitHub Actions-backed caches for tools like Buildx and Trivy (default: true)"
+        required: false
+        default: "true"
+        type: string
       docker_login:
         description: "Docker Hub: Username (Required if publishing to Docker Hub)"
         required: false
@@ -156,45 +161,67 @@ jobs:
       enable_security_scan: ${{ steps.store_inputs.outputs.enable_security_scan }}
       enable_security_upload: ${{ steps.store_inputs.outputs.enable_security_upload }}
       enable_sbom: ${{ steps.store_inputs.outputs.enable_sbom }}
+      enable_cache: ${{ steps.store_inputs.outputs.enable_cache }}
 
     steps:
       - name: Store inputs as outputs
         id: store_inputs
+        env:
+          INPUT_IMAGE_NAME: ${{ inputs.image_name }}
+          INPUT_RELEASE_BRANCH: ${{ inputs.release_branch }}
+          INPUT_DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+          INPUT_BUILD_PLATFORMS: ${{ inputs.build_platforms }}
+          INPUT_VERSION_CONFIG_PATH: ${{ inputs.version_config_path }}
+          INPUT_GCP_REGION: ${{ inputs.gcp_region }}
+          INPUT_GCP_PROJECT_ID: ${{ inputs.gcp_project_id }}
+          INPUT_GCP_REPO: ${{ inputs.gcp_repo }}
+          INPUT_GCP_WIP: ${{ inputs.gcp_workload_identity_provider }}
+          INPUT_GCP_SERVICE_ACCOUNT: ${{ inputs.gcp_service_account }}
+          INPUT_ACR_REGISTRY: ${{ inputs.acr_registry }}
+          INPUT_ACR_REPOSITORY: ${{ inputs.acr_repository }}
+          INPUT_AZURE_CLIENT_ID: ${{ inputs.azure_client_id }}
+          INPUT_AZURE_TENANT_ID: ${{ inputs.azure_tenant_id }}
+          INPUT_AZURE_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
+          INPUT_ENABLE_SBOM: ${{ inputs.enable_sbom }}
+          INPUT_ENABLE_SECURITY_SCAN: ${{ inputs.enable_security_scan }}
+          INPUT_ENABLE_SECURITY_UPLOAD: ${{ inputs.enable_security_upload }}
+          INPUT_ENABLE_CACHE: ${{ inputs.enable_cache }}
         run: |
           echo "🔄 Processing workflow inputs..."
           # Store all workflow inputs as outputs
-          echo "image_name=${{ inputs.image_name }}" >> $GITHUB_OUTPUT
-          echo "release_branch=${{ inputs.release_branch }}" >> $GITHUB_OUTPUT
-          echo "dockerfile_path=${{ inputs.dockerfile_path }}" >> $GITHUB_OUTPUT
-          echo "build_platforms=${{ inputs.build_platforms }}" >> $GITHUB_OUTPUT
-          echo "version_config_path=${{ inputs.version_config_path }}" >> $GITHUB_OUTPUT
+          printf 'image_name=%s\n' "${INPUT_IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          printf 'release_branch=%s\n' "${INPUT_RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile_path=%s\n' "${INPUT_DOCKERFILE_PATH}" >> "$GITHUB_OUTPUT"
+          printf 'build_platforms=%s\n' "${INPUT_BUILD_PLATFORMS}" >> "$GITHUB_OUTPUT"
+          printf 'version_config_path=%s\n' "${INPUT_VERSION_CONFIG_PATH}" >> "$GITHUB_OUTPUT"
 
           # Store GCP inputs
-          echo "gcp_region=${{ inputs.gcp_region }}" >> $GITHUB_OUTPUT
-          echo "gcp_project_id=${{ inputs.gcp_project_id }}" >> $GITHUB_OUTPUT
-          echo "gcp_repo=${{ inputs.gcp_repo }}" >> $GITHUB_OUTPUT
-          echo "gcp_workload_identity_provider=${{ inputs.gcp_workload_identity_provider }}" >> $GITHUB_OUTPUT
-          echo "gcp_service_account=${{ inputs.gcp_service_account }}" >> $GITHUB_OUTPUT
+          printf 'gcp_region=%s\n' "${INPUT_GCP_REGION}" >> "$GITHUB_OUTPUT"
+          printf 'gcp_project_id=%s\n' "${INPUT_GCP_PROJECT_ID}" >> "$GITHUB_OUTPUT"
+          printf 'gcp_repo=%s\n' "${INPUT_GCP_REPO}" >> "$GITHUB_OUTPUT"
+          printf 'gcp_workload_identity_provider=%s\n' "${INPUT_GCP_WIP}" >> "$GITHUB_OUTPUT"
+          printf 'gcp_service_account=%s\n' "${INPUT_GCP_SERVICE_ACCOUNT}" >> "$GITHUB_OUTPUT"
 
           # Store ACR inputs
-          echo "acr_registry=${{ inputs.acr_registry }}" >> $GITHUB_OUTPUT
-          echo "acr_repository=${{ inputs.acr_repository }}" >> $GITHUB_OUTPUT
+          printf 'acr_registry=%s\n' "${INPUT_ACR_REGISTRY}" >> "$GITHUB_OUTPUT"
+          printf 'acr_repository=%s\n' "${INPUT_ACR_REPOSITORY}" >> "$GITHUB_OUTPUT"
 
           # Store Azure OIDC inputs
-          echo "azure_client_id=${{ inputs.azure_client_id }}" >> $GITHUB_OUTPUT
-          echo "azure_tenant_id=${{ inputs.azure_tenant_id }}" >> $GITHUB_OUTPUT
-          echo "azure_subscription_id=${{ inputs.azure_subscription_id }}" >> $GITHUB_OUTPUT
+          printf 'azure_client_id=%s\n' "${INPUT_AZURE_CLIENT_ID}" >> "$GITHUB_OUTPUT"
+          printf 'azure_tenant_id=%s\n' "${INPUT_AZURE_TENANT_ID}" >> "$GITHUB_OUTPUT"
+          printf 'azure_subscription_id=%s\n' "${INPUT_AZURE_SUBSCRIPTION_ID}" >> "$GITHUB_OUTPUT"
 
           # Store security upload setting
-          echo "enable_sbom=${{ inputs.enable_sbom }}" >> $GITHUB_OUTPUT
-          echo "enable_security_scan=${{ inputs.enable_security_scan }}" >> $GITHUB_OUTPUT
-          echo "enable_security_upload=${{ inputs.enable_security_upload }}" >> $GITHUB_OUTPUT
+          printf 'enable_sbom=%s\n' "${INPUT_ENABLE_SBOM}" >> "$GITHUB_OUTPUT"
+          printf 'enable_security_scan=%s\n' "${INPUT_ENABLE_SECURITY_SCAN}" >> "$GITHUB_OUTPUT"
+          printf 'enable_security_upload=%s\n' "${INPUT_ENABLE_SECURITY_UPLOAD}" >> "$GITHUB_OUTPUT"
+          printf 'enable_cache=%s\n' "${INPUT_ENABLE_CACHE}" >> "$GITHUB_OUTPUT"
 
           # Log stored inputs
           echo "✅ All workflow inputs stored as outputs"
-          echo "📋 Image: ${{ inputs.image_name }}"
-          echo "📋 Release branch: ${{ inputs.release_branch }}"
-          echo "📋 Dockerfile path: ${{ inputs.dockerfile_path }}"
+          echo "📋 Image: ${INPUT_IMAGE_NAME}"
+          echo "📋 Release branch: ${INPUT_RELEASE_BRANCH}"
+          echo "📋 Dockerfile path: ${INPUT_DOCKERFILE_PATH}"
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -223,11 +250,14 @@ jobs:
 
       - name: Determine version source
         id: check_version
+        env:
+          HAS_PACKAGE_JSON: ${{ steps.check_package_json.outputs.has_package_json }}
+          PACKAGE_VERSION: ${{ steps.package_version.outputs.version }}
         run: |
-          if [ "${{ steps.check_package_json.outputs.has_package_json }}" == "true" ]; then
+          if [ "${HAS_PACKAGE_JSON}" == "true" ]; then
             echo "use_gitversion=false" >> $GITHUB_OUTPUT
             echo "version_source=package.json" >> $GITHUB_OUTPUT
-            echo "📋 Using version from package.json: ${{ steps.package_version.outputs.version }}"
+            echo "📋 Using version from package.json: ${PACKAGE_VERSION}"
           else
             echo "use_gitversion=true" >> $GITHUB_OUTPUT
             echo "version_source=gitversion" >> $GITHUB_OUTPUT
@@ -249,13 +279,15 @@ jobs:
       - name: Check if GitVersion config exists
         id: check_gitversion_config
         if: steps.check_version.outputs.use_gitversion == 'true'
+        env:
+          VERSION_CONFIG_PATH: ${{ steps.store_inputs.outputs.version_config_path }}
         run: |
-          if [ -f "${{ steps.store_inputs.outputs.version_config_path }}" ]; then
+          if [ -f "${VERSION_CONFIG_PATH}" ]; then
             echo "config_exists=true" >> $GITHUB_OUTPUT
-            echo "GitVersion config file found at ${{ steps.store_inputs.outputs.version_config_path }}."
+            echo "GitVersion config file found at ${VERSION_CONFIG_PATH}."
           else
             echo "config_exists=false" >> $GITHUB_OUTPUT
-            echo "::error:: GitVersion config file not found at ${{ steps.store_inputs.outputs.version_config_path }}."
+            echo "::error:: GitVersion config file not found at ${VERSION_CONFIG_PATH}."
             exit 1
           fi
 
@@ -269,32 +301,38 @@ jobs:
       - name: Determine Branch Information
         id: branches
         shell: bash
+        env:
+          RELEASE_BRANCH_INPUT: ${{ steps.store_inputs.outputs.release_branch }}
         run: |
           echo "🔄 Analyzing branch information..."
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
           echo "📌 Current branch: ${BRANCH_NAME}"
 
-          IS_RELEASE_BRANCH=$([[ "${BRANCH_NAME}" == "${{ steps.store_inputs.outputs.release_branch }}" ]] && echo "true" || echo "false")
+          IS_RELEASE_BRANCH=$([[ "${BRANCH_NAME}" == "${RELEASE_BRANCH_INPUT}" ]] && echo "true" || echo "false")
           if [ "$IS_RELEASE_BRANCH" = "true" ]; then
-            echo "✅ Branch matches release branch: ${{ steps.store_inputs.outputs.release_branch }}"
+            echo "✅ Branch matches release branch: ${RELEASE_BRANCH_INPUT}"
           else
-            echo "⚠️ Branch does not match release branch: ${{ steps.store_inputs.outputs.release_branch }}"
+            echo "⚠️ Branch does not match release branch: ${RELEASE_BRANCH_INPUT}"
           fi
           echo "is_release_branch=${IS_RELEASE_BRANCH}" >> $GITHUB_OUTPUT
           echo "✅ Branch analysis completed"
 
       - name: Set Version
         id: set_version
+        env:
+          USE_GITVERSION: ${{ steps.check_version.outputs.use_gitversion }}
+          GITVERSION_SEMVER: ${{ steps.gitversion.outputs.semVer }}
+          PACKAGE_VERSION: ${{ steps.package_version.outputs.version }}
         run: |
           echo "🔄 Setting version..."
-          if [ "${{ steps.check_version.outputs.use_gitversion }}" == "true" ]; then
+          if [ "${USE_GITVERSION}" == "true" ]; then
             # Get version from GitVersion
-            VERSION="${{ steps.gitversion.outputs.semVer }}"
+            VERSION="${GITVERSION_SEMVER}"
             VERSION_SOURCE="GitVersion"
           else
             # Get version from package.json
-            VERSION="${{ steps.package_version.outputs.version }}"
+            VERSION="${PACKAGE_VERSION}"
             VERSION_SOURCE="package.json"
           fi
 
@@ -306,11 +344,14 @@ jobs:
 
       - name: Extract Docker Hub Credentials
         id: extract_docker_creds
+        env:
+          DOCKER_TOKEN_INPUT: ${{ secrets.docker_token }}
+          DOCKER_LOGIN_INPUT: ${{ inputs.docker_login }}
         run: |
           echo "🔄 Checking Docker Hub credentials..."
           # Store Docker Hub credentials securely
-          DOCKER_TOKEN="${{ secrets.docker_token }}"
-          DOCKER_LOGIN="${{ inputs.docker_login }}"
+          DOCKER_TOKEN="${DOCKER_TOKEN_INPUT}"
+          DOCKER_LOGIN="${DOCKER_LOGIN_INPUT}"
 
           echo "docker_login=${DOCKER_LOGIN}" >> $GITHUB_OUTPUT
 
@@ -324,11 +365,14 @@ jobs:
 
       - name: Extract Docker Hub Publishing Config
         id: extract_docker_publish_config
+        env:
+          DOCKER_ORG_INPUT: ${{ inputs.docker_org }}
+          DOCKER_REPO_INPUT: ${{ inputs.docker_repo }}
         run: |
           echo "🔄 Checking Docker Hub publishing configuration..."
           # Store Docker Hub publishing config
-          DOCKER_ORG="${{ inputs.docker_org }}"
-          DOCKER_REPO="${{ inputs.docker_repo }}"
+          DOCKER_ORG="${DOCKER_ORG_INPUT}"
+          DOCKER_REPO="${DOCKER_REPO_INPUT}"
 
           if [ -n "${DOCKER_ORG}" ] && [ -n "${DOCKER_REPO}" ]; then
             echo "has_config=true" >> $GITHUB_OUTPUT
@@ -342,14 +386,20 @@ jobs:
 
       - name: Extract and Check GCP Credentials
         id: extract_gcp_creds
+        env:
+          GCP_REGION_INPUT: ${{ steps.store_inputs.outputs.gcp_region }}
+          GCP_PROJECT_ID_INPUT: ${{ steps.store_inputs.outputs.gcp_project_id }}
+          GCP_REPO_INPUT: ${{ steps.store_inputs.outputs.gcp_repo }}
+          GCP_WI_PROVIDER_INPUT: ${{ steps.store_inputs.outputs.gcp_workload_identity_provider }}
+          GCP_SERVICE_ACCOUNT_INPUT: ${{ steps.store_inputs.outputs.gcp_service_account }}
         run: |
           echo "🔄 Checking GCP Workload Identity configuration..."
           # Get inputs from store_inputs step
-          GCP_REGION="${{ steps.store_inputs.outputs.gcp_region }}"
-          GCP_PROJECT_ID="${{ steps.store_inputs.outputs.gcp_project_id }}"
-          GCP_REPO="${{ steps.store_inputs.outputs.gcp_repo }}"
-          GCP_WI_PROVIDER="${{ steps.store_inputs.outputs.gcp_workload_identity_provider }}"
-          GCP_SERVICE_ACCOUNT="${{ steps.store_inputs.outputs.gcp_service_account }}"
+          GCP_REGION="${GCP_REGION_INPUT}"
+          GCP_PROJECT_ID="${GCP_PROJECT_ID_INPUT}"
+          GCP_REPO="${GCP_REPO_INPUT}"
+          GCP_WI_PROVIDER="${GCP_WI_PROVIDER_INPUT}"
+          GCP_SERVICE_ACCOUNT="${GCP_SERVICE_ACCOUNT_INPUT}"
 
           # Define parameter map for validation
           declare -A params=(
@@ -388,14 +438,20 @@ jobs:
 
       - name: Extract and Check ACR Credentials
         id: extract_acr_creds
+        env:
+          ACR_REGISTRY_INPUT: ${{ steps.store_inputs.outputs.acr_registry }}
+          ACR_REPOSITORY_INPUT: ${{ steps.store_inputs.outputs.acr_repository }}
+          AZURE_CLIENT_ID_INPUT: ${{ steps.store_inputs.outputs.azure_client_id }}
+          AZURE_TENANT_ID_INPUT: ${{ steps.store_inputs.outputs.azure_tenant_id }}
+          AZURE_SUBSCRIPTION_ID_INPUT: ${{ steps.store_inputs.outputs.azure_subscription_id }}
         run: |
           echo "🔄 Checking ACR credentials and configuration..."
           # Get inputs from store_inputs step
-          ACR_REGISTRY="${{ steps.store_inputs.outputs.acr_registry }}"
-          ACR_REPOSITORY="${{ steps.store_inputs.outputs.acr_repository }}"
-          AZURE_CLIENT_ID="${{ steps.store_inputs.outputs.azure_client_id }}"
-          AZURE_TENANT_ID="${{ steps.store_inputs.outputs.azure_tenant_id }}"
-          AZURE_SUBSCRIPTION_ID="${{ steps.store_inputs.outputs.azure_subscription_id }}"
+          ACR_REGISTRY="${ACR_REGISTRY_INPUT}"
+          ACR_REPOSITORY="${ACR_REPOSITORY_INPUT}"
+          AZURE_CLIENT_ID="${AZURE_CLIENT_ID_INPUT}"
+          AZURE_TENANT_ID="${AZURE_TENANT_ID_INPUT}"
+          AZURE_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID_INPUT}"
 
           # Define parameter map for validation
           declare -A params=(
@@ -434,9 +490,11 @@ jobs:
 
       - name: Extract and Check Slack Webhook
         id: extract_slack_webhook
+        env:
+          SLACK_WEBHOOK_INPUT: ${{ secrets.slack_webhook_url }}
         run: |
           echo "🔄 Checking Slack webhook..."
-          SLACK_WEBHOOK="${{ secrets.slack_webhook_url }}"
+          SLACK_WEBHOOK="${SLACK_WEBHOOK_INPUT}"
           if [ -n "${SLACK_WEBHOOK}" ]; then
             echo "has_webhook=true" >> $GITHUB_OUTPUT
             echo "✅ Slack webhook found"
@@ -447,12 +505,15 @@ jobs:
 
       - name: Parse build arguments
         id: parse_build_args
+        env:
+          BUILD_ARGS_INPUT: ${{ inputs.build_args }}
+          RELEASE_VERSION_INPUT: ${{ steps.set_version.outputs.version }}
+          BRANCH_NAME_INPUT: ${{ steps.branches.outputs.branch_name }}
         run: |
           echo "🔄 Processing build arguments..."
           # Get build args from inputs
-          BUILD_ARGS_INPUT="${{ inputs.build_args }}"
-          RELEASE_VERSION="${{ steps.set_version.outputs.version }}"
-          BRANCH_NAME="${{ steps.branches.outputs.branch_name }}"
+          RELEASE_VERSION="${RELEASE_VERSION_INPUT}"
+          BRANCH_NAME="${BRANCH_NAME_INPUT}"
 
           # Process user-provided build args
           if [ -n "${BUILD_ARGS_INPUT}" ]; then
@@ -485,65 +546,121 @@ jobs:
           fi
 
       - name: Summarize Configuration
+        env:
+          VERSION: ${{ steps.set_version.outputs.version }}
+          VERSION_SOURCE: ${{ steps.set_version.outputs.version_source }}
+          IMAGE_NAME_INPUT: ${{ steps.store_inputs.outputs.image_name }}
+          DOCKERFILE_PATH_INPUT: ${{ steps.store_inputs.outputs.dockerfile_path }}
+          BUILD_PLATFORMS_INPUT: ${{ steps.store_inputs.outputs.build_platforms }}
+          BRANCH_NAME_INPUT: ${{ steps.branches.outputs.branch_name }}
+          RELEASE_BRANCH_INPUT: ${{ steps.store_inputs.outputs.release_branch }}
+          IS_RELEASE_BRANCH_INPUT: ${{ steps.branches.outputs.is_release_branch }}
+          EVENT_NAME_INPUT: ${{ github.event_name }}
+          DOCKER_HAS_CREDENTIALS_INPUT: ${{ steps.extract_docker_creds.outputs.has_credentials }}
+          DOCKER_HAS_CONFIG_INPUT: ${{ steps.extract_docker_publish_config.outputs.has_config }}
+          GCP_HAS_CREDENTIALS_INPUT: ${{ steps.extract_gcp_creds.outputs.has_credentials }}
+          ACR_HAS_CREDENTIALS_INPUT: ${{ steps.extract_acr_creds.outputs.has_credentials }}
+          HAS_SLACK_WEBHOOK_INPUT: ${{ steps.extract_slack_webhook.outputs.has_webhook }}
+          ENABLE_SECURITY_SCAN_INPUT: ${{ steps.store_inputs.outputs.enable_security_scan }}
+          ENABLE_SECURITY_UPLOAD_INPUT: ${{ steps.store_inputs.outputs.enable_security_upload }}
+          ENABLE_CACHE_INPUT: ${{ steps.store_inputs.outputs.enable_cache }}
         run: |
           echo "📋 Build Configuration Summary"
           echo "----------------------------"
-          echo "🏷️ Version: ${{ steps.set_version.outputs.version }} (Source: ${{ steps.set_version.outputs.version_source }})"
-          echo "🔄 Image: ${{ steps.store_inputs.outputs.image_name }}"
-          echo "📄 Dockerfile: ${{ steps.store_inputs.outputs.dockerfile_path }}"
-          echo "🌐 Platforms: ${{ steps.store_inputs.outputs.build_platforms }}"
-          echo "🔖 Branch: ${{ steps.branches.outputs.branch_name }}"
-          echo "🚀 Release Branch: ${{ steps.store_inputs.outputs.release_branch }} (${{ steps.branches.outputs.is_release_branch == 'true' && '✓ matched' || '✗ not matched' }})"
-          echo "🔄 Trigger: ${{ github.event_name }}"
+          RELEASE_BRANCH_STATUS="✗ not matched"
+          DOCKER_PULL_STATUS="❌ disabled"
+          DOCKER_PUBLISH_STATUS="❌ disabled"
+          GCP_STATUS="❌ disabled"
+          ACR_STATUS="❌ disabled"
+          SLACK_STATUS="❌ disabled"
+          SECURITY_SCAN_STATUS="❌ disabled"
+          SECURITY_UPLOAD_STATUS="❌ disabled"
+          WORKFLOW_CACHE_STATUS="❌ disabled"
+
+          if [[ "${IS_RELEASE_BRANCH_INPUT}" == "true" ]]; then
+            RELEASE_BRANCH_STATUS="✓ matched"
+          fi
+          if [[ "${DOCKER_HAS_CREDENTIALS_INPUT}" == "true" ]]; then
+            DOCKER_PULL_STATUS="✅ enabled"
+          fi
+          if [[ "${DOCKER_HAS_CREDENTIALS_INPUT}" == "true" && "${DOCKER_HAS_CONFIG_INPUT}" == "true" ]]; then
+            DOCKER_PUBLISH_STATUS="✅ enabled"
+          fi
+          if [[ "${GCP_HAS_CREDENTIALS_INPUT}" == "true" ]]; then
+            GCP_STATUS="✅ enabled"
+          fi
+          if [[ "${ACR_HAS_CREDENTIALS_INPUT}" == "true" ]]; then
+            ACR_STATUS="✅ enabled"
+          fi
+          if [[ "${HAS_SLACK_WEBHOOK_INPUT}" == "true" ]]; then
+            SLACK_STATUS="✅ enabled"
+          fi
+          if [[ "${ENABLE_SECURITY_SCAN_INPUT}" == "true" ]]; then
+            SECURITY_SCAN_STATUS="✅ enabled"
+          fi
+          if [[ "${ENABLE_SECURITY_UPLOAD_INPUT}" == "true" ]]; then
+            SECURITY_UPLOAD_STATUS="✅ enabled"
+          fi
+          if [[ "${ENABLE_CACHE_INPUT}" == "true" ]]; then
+            WORKFLOW_CACHE_STATUS="✅ enabled"
+          fi
+
+          echo "🏷️ Version: ${VERSION} (Source: ${VERSION_SOURCE})"
+          echo "🔄 Image: ${IMAGE_NAME_INPUT}"
+          echo "📄 Dockerfile: ${DOCKERFILE_PATH_INPUT}"
+          echo "🌐 Platforms: ${BUILD_PLATFORMS_INPUT}"
+          echo "🔖 Branch: ${BRANCH_NAME_INPUT}"
+          echo "🚀 Release Branch: ${RELEASE_BRANCH_INPUT} (${RELEASE_BRANCH_STATUS})"
+          echo "🔄 Trigger: ${EVENT_NAME_INPUT}"
           echo ""
           echo "📦 Distribution Channels"
           echo "----------------------------"
-          echo "🐳 Docker Hub Pulling: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
-          echo "🐳 Docker Hub Publishing: ${{ steps.extract_docker_creds.outputs.has_credentials == 'true' && steps.extract_docker_publish_config.outputs.has_config == 'true' && '✅ enabled' || '❌ disabled' }}"
-          echo "☁️ Google Cloud: ${{ steps.extract_gcp_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
-          echo "💠 Azure Container Registry: ${{ steps.extract_acr_creds.outputs.has_credentials == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "🐳 Docker Hub Pulling: ${DOCKER_PULL_STATUS}"
+          echo "🐳 Docker Hub Publishing: ${DOCKER_PUBLISH_STATUS}"
+          echo "☁️ Google Cloud: ${GCP_STATUS}"
+          echo "💠 Azure Container Registry: ${ACR_STATUS}"
           echo ""
           echo "⚙️ Workflow Execution Plan"
           echo "----------------------------"
           echo "🔍 Build & Scan: ✅ Always runs"
 
           # GitHub Release - only on release branches
-          if [[ "${{ steps.branches.outputs.is_release_branch }}" == "true" ]]; then
+          if [[ "${IS_RELEASE_BRANCH_INPUT}" == "true" ]]; then
             echo "📦 GitHub Release: ✅ Will run (release branch)"
           else
             echo "📦 GitHub Release: ❌ Will not run (not a release branch)"
           fi
 
           # Docker Hub Release - only on release branches with credentials
-          if [[ "${{ steps.branches.outputs.is_release_branch }}" == "true" && \
-                "${{ steps.extract_docker_creds.outputs.has_credentials }}" == "true" && \
-                "${{ steps.extract_docker_publish_config.outputs.has_config }}" == "true" ]]; then
+          if [[ "${IS_RELEASE_BRANCH_INPUT}" == "true" && \
+                "${DOCKER_HAS_CREDENTIALS_INPUT}" == "true" && \
+                "${DOCKER_HAS_CONFIG_INPUT}" == "true" ]]; then
             echo "🐳 Docker Hub Release: ✅ Will run (release branch with credentials)"
           else
             echo "🐳 Docker Hub Release: ❌ Will not run"
           fi
 
           # GCP Release - on release branches or manual trigger with credentials
-          if [[ ("${{ steps.branches.outputs.is_release_branch }}" == "true" || \
-                "${{ github.event_name }}" == "workflow_dispatch") && \
-                "${{ steps.extract_gcp_creds.outputs.has_credentials }}" == "true" ]]; then
+          if [[ ("${IS_RELEASE_BRANCH_INPUT}" == "true" || \
+                "${EVENT_NAME_INPUT}" == "workflow_dispatch") && \
+                "${GCP_HAS_CREDENTIALS_INPUT}" == "true" ]]; then
             echo "☁️ GCP Release: ✅ Will run"
           else
             echo "☁️ GCP Release: ❌ Will not run"
           fi
 
           # ACR Release - on release branches or manual trigger with credentials
-          if [[ ("${{ steps.branches.outputs.is_release_branch }}" == "true" || \
-                "${{ github.event_name }}" == "workflow_dispatch") && \
-                "${{ steps.extract_acr_creds.outputs.has_credentials }}" == "true" ]]; then
+          if [[ ("${IS_RELEASE_BRANCH_INPUT}" == "true" || \
+                "${EVENT_NAME_INPUT}" == "workflow_dispatch") && \
+                "${ACR_HAS_CREDENTIALS_INPUT}" == "true" ]]; then
             echo "💠 ACR Release: ✅ Will run"
           else
             echo "💠 ACR Release: ❌ Will not run"
           fi
 
           # Slack Notification - only on release branches with webhook
-          if [[ "${{ steps.branches.outputs.is_release_branch }}" == "true" && \
-                "${{ steps.extract_slack_webhook.outputs.has_webhook }}" == "true" ]]; then
+          if [[ "${IS_RELEASE_BRANCH_INPUT}" == "true" && \
+                "${HAS_SLACK_WEBHOOK_INPUT}" == "true" ]]; then
             echo "📢 Slack Notification: ✅ Will run (release branch with webhook)"
           else
             echo "📢 Slack Notification: ❌ Will not run"
@@ -552,9 +669,10 @@ jobs:
           echo ""
           echo "Additional Configurations"
           echo "----------------------------"
-          echo "Slack Webhook: ${{ steps.extract_slack_webhook.outputs.has_webhook == 'true' && '✅ enabled' || '❌ disabled' }}"
-          echo "Security Scan: ${{ steps.store_inputs.outputs.enable_security_scan == 'true' && '✅ enabled' || '❌ disabled' }}"
-          echo "Security Upload: ${{ steps.store_inputs.outputs.enable_security_upload == 'true' && '✅ enabled' || '❌ disabled' }}"
+          echo "Slack Webhook: ${SLACK_STATUS}"
+          echo "Security Scan: ${SECURITY_SCAN_STATUS}"
+          echo "Security Upload: ${SECURITY_UPLOAD_STATUS}"
+          echo "Workflow Cache: ${WORKFLOW_CACHE_STATUS}"
           echo ""
 
   control-gate:
@@ -566,21 +684,23 @@ jobs:
       CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
     steps:
       - name: Release branch protection
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           echo "Checking workflow event type..."
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
             echo "Event: workflow_dispatch (manual trigger)"
             echo "Checking if branch is release branch..."
             
-            if [[ "${{ env.CURRENT_BRANCH }}" == "${{ env.RELEASE_BRANCH }}" ]]; then
-              echo "::error:: Branch: ${{ env.RELEASE_BRANCH }} (release branch). Stopping workflow."
+            if [[ "${CURRENT_BRANCH}" == "${RELEASE_BRANCH}" ]]; then
+              echo "::error:: Branch: ${RELEASE_BRANCH} (release branch). Stopping workflow."
               exit 1
             else
-              echo "Branch: ${{ env.CURRENT_BRANCH }} (not release branch). Proceeding with workflow."
+              echo "Branch: ${CURRENT_BRANCH} (not release branch). Proceeding with workflow."
             fi
           else
-            echo "Event: ${{ github.event_name }} (not manual trigger). Proceeding with workflow."
+            echo "Event: ${EVENT_NAME} (not manual trigger). Proceeding with workflow."
           fi
 
   build-and-scan:
@@ -595,6 +715,7 @@ jobs:
       ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
       ENABLE_SECURITY_UPLOAD: ${{ needs.config.outputs.enable_security_upload }}
       ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
+      ENABLE_CACHE: ${{ needs.config.outputs.enable_cache }}
       DOCKER_HAS_CREDENTIALS: ${{ needs.config.outputs.docker_has_credentials }}
       DOCKER_LOGIN: ${{ needs.config.outputs.docker_login }}
       DOCKER_TOKEN: ${{ secrets.docker_token }}
@@ -611,6 +732,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
         with:
           driver: docker-container
+          cache-binary: ${{ env.ENABLE_CACHE == 'true' }}
 
       - name: Log in to Docker Hub
         if: env.DOCKER_HAS_CREDENTIALS == 'true'
@@ -674,12 +796,13 @@ jobs:
         if: env.ENABLE_SBOM == 'true'
         run: |
           export TRIVY_DISABLE_VEX_NOTICE=true
+          IMAGE_REF="${IMAGE_NAME}:${RELEASE_VERSION}"
           max_retries=5
           attempt=1
           success=false
           while [ $attempt -le $max_retries ]; do
             echo "🔄 Generating SBOM, attempt $attempt..."
-            trivy image --format spdx-json --output sbom.json ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+            trivy image --format spdx-json --output sbom.json "${IMAGE_REF}"
             if [ $? -eq 0 ]; then
               echo "✅ SBOM generation successful"
               success=true
@@ -700,6 +823,7 @@ jobs:
         if: ${{ env.ENABLE_SECURITY_SCAN != 'false' }}
         with:
           image-ref: "${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
+          cache: ${{ env.ENABLE_CACHE == 'true' }}
           exit-code: "0"
           format: "sarif"
           output: "trivy-results.sarif"
@@ -717,6 +841,7 @@ jobs:
         with:
           name: sbom
           path: sbom.json
+          retention-days: 1
 
   github-release:
     runs-on: ubuntu-24.04
@@ -759,12 +884,14 @@ jobs:
         id: parse_changelog
         if: steps.check_changelog.outputs.has_changelog == 'true'
         uses: actions/github-script@v8
+        env:
+          RELEASE_VERSION_INPUT: ${{ env.RELEASE_VERSION }}
         with:
           script: |
             const { open } = require('fs/promises');
             const fs = require('fs');
 
-            const version = '${{ env.RELEASE_VERSION }}';
+            const version = process.env.RELEASE_VERSION_INPUT;
             const delimiter = '### ';
             const file = await open('./changes.md');
 
@@ -840,8 +967,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git tag ${{ env.RELEASE_VERSION }}
-          git push origin ${{ env.RELEASE_VERSION }}
+          git tag "${RELEASE_VERSION}"
+          git push origin "${RELEASE_VERSION}"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -883,6 +1010,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
         with:
           driver: docker-container
+          cache-binary: ${{ needs.config.outputs.enable_cache == 'true' }}
 
       - name: Log in
         uses: docker/login-action@v4
@@ -966,6 +1094,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
         with:
           driver: docker-container
+          cache-binary: ${{ needs.config.outputs.enable_cache == 'true' }}
 
       - name: Log in
         uses: docker/login-action@v4
@@ -1043,6 +1172,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
         with:
           driver: docker-container
+          cache-binary: ${{ needs.config.outputs.enable_cache == 'true' }}
 
       - name: Log in
         uses: docker/login-action@v4
@@ -1153,14 +1283,14 @@ jobs:
 
       - name: Configure Docker for Artifact Registry
         run: |
-          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev"
 
       # Create safe branch name for feature branches
       - name: Create safe branch name
         if: env.IS_RELEASE_BRANCH == 'false'
         run: |
           # Create safe branch name by replacing slashes with dashes
-          SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
+          SAFE_BRANCH_NAME=$(echo "${CURRENT_BRANCH}" | sed 's/\//-/g')
           echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
 
       # Delete existing images to prevent orphaned resources
@@ -1170,8 +1300,8 @@ jobs:
         run: |
           echo "🔄 Checking for existing feature branch images..."
           # Define variables
-          IMAGE_PATH="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}"
-          TAG="${{ env.SAFE_BRANCH_NAME }}"
+          IMAGE_PATH="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_REPO}/${IMAGE_NAME}"
+          TAG="${SAFE_BRANCH_NAME}"
 
           echo "ℹ️ Looking for tag: ${TAG} in ${IMAGE_PATH}"
 
@@ -1196,13 +1326,13 @@ jobs:
         run: |
           echo "🔄 Preparing GCP Docker tags..."
           # Set tags based on branch
-          if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
+          if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
             # Production release - use semantic version and latest tag
-            TAGS="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }},${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}:latest"
+            TAGS="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_REPO}/${IMAGE_NAME}:${RELEASE_VERSION},${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_REPO}/${IMAGE_NAME}:latest"
             echo "ℹ️ Production release: Adding both version and latest tags"
           else
             # Feature branch build - only use branch name tag
-            TAGS="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REPO }}/${{ env.IMAGE_NAME }}:${{ env.SAFE_BRANCH_NAME }}"
+            TAGS="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_REPO}/${IMAGE_NAME}:${SAFE_BRANCH_NAME}"
             echo "ℹ️ Feature branch build: Using branch name tag only"
           fi
 
@@ -1273,16 +1403,16 @@ jobs:
 
       - name: Log in to Azure Container Registry
         run: |
-          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
+          REGISTRY_NAME=$(echo "${ACR_REGISTRY}" | cut -d'.' -f1)
           TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
-          echo "${TOKEN}" | docker login ${{ env.ACR_REGISTRY }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
+          echo "${TOKEN}" | docker login "${ACR_REGISTRY}" --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       # Create safe branch name for feature branches
       - name: Create safe branch name
         if: env.IS_RELEASE_BRANCH == 'false'
         run: |
           # Create safe branch name by replacing slashes with dashes
-          SAFE_BRANCH_NAME=$(echo "${{ env.CURRENT_BRANCH }}" | sed 's/\//-/g')
+          SAFE_BRANCH_NAME=$(echo "${CURRENT_BRANCH}" | sed 's/\//-/g')
           echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
 
       # Delete existing images to prevent orphaned resources
@@ -1292,9 +1422,9 @@ jobs:
         run: |
           echo "🔄 Checking for existing feature branch images..."
           # Define variables
-          REGISTRY_NAME=$(echo "${{ env.ACR_REGISTRY }}" | cut -d'.' -f1)
-          REPOSITORY="${{ env.ACR_REPOSITORY }}"
-          TAG="${{ env.SAFE_BRANCH_NAME }}"
+          REGISTRY_NAME=$(echo "${ACR_REGISTRY}" | cut -d'.' -f1)
+          REPOSITORY="${ACR_REPOSITORY}"
+          TAG="${SAFE_BRANCH_NAME}"
 
           echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
 
@@ -1319,13 +1449,13 @@ jobs:
         run: |
           echo "🔄 Preparing ACR Docker tags..."
           # Set tags based on branch
-          if [[ "${{ env.IS_RELEASE_BRANCH }}" == "true" ]]; then
+          if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
             # Production release - use semantic version and latest tag
-            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.RELEASE_VERSION }},${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:latest"
+            TAGS="${ACR_REGISTRY}/${ACR_REPOSITORY}:${RELEASE_VERSION},${ACR_REGISTRY}/${ACR_REPOSITORY}:latest"
             echo "ℹ️ Production release: Adding both version and latest tags"
           else
             # Feature branch build - only use branch name tag
-            TAGS="${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:${{ env.SAFE_BRANCH_NAME }}"
+            TAGS="${ACR_REGISTRY}/${ACR_REPOSITORY}:${SAFE_BRANCH_NAME}"
             echo "ℹ️ Feature branch build: Using branch name tag only"
           fi
 
@@ -1345,7 +1475,7 @@ jobs:
           tags: ${{ env.ACR_DOCKER_TAGS }}
 
       - name: Log out from Azure Container Registry
-        run: docker logout ${{ env.ACR_REGISTRY }}
+        run: docker logout "${ACR_REGISTRY}"
 
   notify:
     runs-on: ubuntu-24.04

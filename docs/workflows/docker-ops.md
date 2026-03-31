@@ -87,6 +87,7 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `enable_security_scan`           | Run vulnerability scan                            | `true`                    |                |
 | `enable_security_upload`         | Upload to GitHub Security                         | `true`                    |                |
 | `enable_sbom`                    | Generate and upload SBOM                          | `true`                    |                |
+| `enable_cache`                   | Allow GitHub Actions-backed caches for Buildx/Trivy | `true`                  |                |
 
 ### Secrets
 
@@ -162,6 +163,7 @@ Example: `build_args: "VERSION={{version}},ENV=production"`
 - Uploads to GitHub Security (release branches)
 - Disable scanning: `enable_security_scan: "false"`
 - Disable SBOM: `enable_sbom: "false"`
+- Disable workflow caches when org/repo storage is tight: `enable_cache: "false"`
 
 **Changelog:**
 
@@ -219,6 +221,27 @@ jobs:
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+### Disable Workflow Cache
+
+Use this when repositories share a tight GitHub Actions storage quota and you want to avoid Buildx/Trivy cache usage.
+
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: my-app
+      enable_cache: "false"
+      docker_login: myusername
+      docker_org: myorg
+      docker_repo: my-app
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
 ```
 
 ### Azure Container Registry Only
