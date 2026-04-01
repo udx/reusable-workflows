@@ -41,7 +41,7 @@ When calling any reusable workflow, use the canonical caller patterns in [`docs/
 ### Quick Caller Notes
 
 - `npm-release-ops` uses keyless npm publishing (OIDC); caller inputs are declared in docs and do not include `npm_token` or `package_version`.
-- `docker-ops` uses provider-specific declared inputs; `registry_url` is not part of this workflow interface.
+- `docker-ops` uses provider-specific declared inputs; `registry_url` is not part of this workflow interface, and subdirectory builds should use `working_directory`.
 - `wp-gh-release-ops` expects `tag`; if your caller uses `tag_name`, map it to `tag`.
 
 ## Available Workflows

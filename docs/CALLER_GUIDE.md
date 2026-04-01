@@ -152,7 +152,7 @@ jobs:
 Always match the called workflow's declared `on.workflow_call.inputs` and `on.workflow_call.secrets`.
 
 - `npm-release-ops` does not define `npm_token` or `package_version`; npm publishing is keyless (OIDC Trusted Publishing) only
-- `docker-ops` does not define `registry_url`; use `image_name` and provider-specific inputs (`docker_*`, `gcp_*`, `acr_*`)
+- `docker-ops` does not define `registry_url`; use `image_name` and provider-specific inputs (`docker_*`, `gcp_*`, `acr_*`), and use `working_directory` for subdirectory builds
 - `wp-gh-release-ops` expects `tag` (not `tag_name`/`tag-name`)
 - `js-ops` supports build env via `build_env` (inline `KEY=VALUE`) or `build_env_file` (repository-root `.env` path), set only one
 
@@ -164,7 +164,7 @@ If a field is not declared in the called workflow interface, skip it and map cal
 | --- | --- | --- | --- |
 | `js-ops` | `build_env` or `build_env_file` | both together | set exactly one build env mode when overriding defaults |
 | `npm-release-ops` | `dist_dir`, `release_branch`, `provenance`, `enable_gh_release` | `npm_token`, `package_version` | version comes from repository `package.json`; npm publish is keyless only |
-| `docker-ops` | `image_name` + provider-specific inputs | `registry_url` | use `docker_*`, `gcp_*`, or `acr_*` inputs |
+| `docker-ops` | `image_name`, optional `working_directory`, + provider-specific inputs | `registry_url` | use `docker_*`, `gcp_*`, or `acr_*` inputs; set `working_directory` for repo subdirs |
 | `wp-gh-release-ops` | `tag` | `tag_name`, `tag-name` | map caller variable names to declared input `tag` |
 
 ## Common Caller Q&A
@@ -303,6 +303,28 @@ jobs:
     with:
       image_name: my-app
       registry_url: ghcr.io/my-org
+```
+
+### 7b. How do I call `docker-ops` for a function inside a monorepo/subdirectory?
+
+Use `working_directory` for the function folder and keep `dockerfile_path` relative to that directory:
+
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: sql-ops
+      working_directory: functions/sqlOps
+      dockerfile_path: Dockerfile
+      docker_login: my-user
+      docker_org: my-org
+      docker_repo: sql-ops
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
 ```
 
 ### 8. How do I securely pass `NPM_TOKEN` to a reusable workflow?

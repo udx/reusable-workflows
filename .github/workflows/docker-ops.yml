@@ -58,6 +58,11 @@ on:
         required: false
         default: "./Dockerfile"
         type: string
+      working_directory:
+        description: "Repository subdirectory containing the Docker build context, package.json, and changes.md (default: .)"
+        required: false
+        default: "."
+        type: string
       build_platforms:
         description: "Platforms to build for (e.g., linux/amd64,linux/arm64). Note: multi-platform is primarily used for Docker Hub."
         required: false
@@ -123,7 +128,7 @@ jobs:
       release_branch: ${{ steps.store_inputs.outputs.release_branch }}
       release_version: ${{ steps.set_version.outputs.version }}
       version_source: ${{ steps.set_version.outputs.version_source }}
-      version_config_path: ${{ steps.store_inputs.outputs.version_config_path }}
+      version_config_path: ${{ steps.validate_paths.outputs.version_config_path }}
 
       # Docker configuration
       docker_has_credentials: ${{ steps.extract_docker_creds.outputs.has_credentials }}
@@ -150,7 +155,8 @@ jobs:
 
       # Build configuration
       image_name: ${{ steps.store_inputs.outputs.image_name }}
-      dockerfile_path: ${{ steps.store_inputs.outputs.dockerfile_path }}
+      dockerfile_path: ${{ steps.validate_paths.outputs.dockerfile_path }}
+      working_directory: ${{ steps.validate_paths.outputs.working_directory }}
       build_platforms: ${{ steps.store_inputs.outputs.build_platforms }}
       build_args: ${{ steps.parse_build_args.outputs.build_args }}
 
@@ -170,6 +176,7 @@ jobs:
           INPUT_IMAGE_NAME: ${{ inputs.image_name }}
           INPUT_RELEASE_BRANCH: ${{ inputs.release_branch }}
           INPUT_DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+          INPUT_WORKING_DIRECTORY: ${{ inputs.working_directory }}
           INPUT_BUILD_PLATFORMS: ${{ inputs.build_platforms }}
           INPUT_VERSION_CONFIG_PATH: ${{ inputs.version_config_path }}
           INPUT_GCP_REGION: ${{ inputs.gcp_region }}
@@ -192,6 +199,7 @@ jobs:
           printf 'image_name=%s\n' "${INPUT_IMAGE_NAME}" >> "$GITHUB_OUTPUT"
           printf 'release_branch=%s\n' "${INPUT_RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile_path=%s\n' "${INPUT_DOCKERFILE_PATH}" >> "$GITHUB_OUTPUT"
+          printf 'working_directory=%s\n' "${INPUT_WORKING_DIRECTORY}" >> "$GITHUB_OUTPUT"
           printf 'build_platforms=%s\n' "${INPUT_BUILD_PLATFORMS}" >> "$GITHUB_OUTPUT"
           printf 'version_config_path=%s\n' "${INPUT_VERSION_CONFIG_PATH}" >> "$GITHUB_OUTPUT"
 
@@ -222,6 +230,111 @@ jobs:
           echo "📋 Image: ${INPUT_IMAGE_NAME}"
           echo "📋 Release branch: ${INPUT_RELEASE_BRANCH}"
           echo "📋 Dockerfile path: ${INPUT_DOCKERFILE_PATH}"
+          echo "📋 Working directory: ${INPUT_WORKING_DIRECTORY}"
+
+      - name: Validate paths
+        id: validate_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ steps.store_inputs.outputs.working_directory }}
+          DOCKERFILE_PATH_INPUT: ${{ steps.store_inputs.outputs.dockerfile_path }}
+          VERSION_CONFIG_PATH_INPUT: ${{ steps.store_inputs.outputs.version_config_path }}
+        run: |
+          set -euo pipefail
+
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          wd="${WORKING_DIRECTORY_INPUT}"
+          dockerfile_input="${DOCKERFILE_PATH_INPUT}"
+          version_config_input="${VERSION_CONFIG_PATH_INPUT}"
+
+          if [[ -z "${wd}" ]]; then
+            wd="."
+          fi
+
+          resolved_wd="$(realpath -m "${GITHUB_WORKSPACE}/${wd}")"
+          case "${resolved_wd}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *)
+              echo "::error::working_directory must stay inside the repository: ${wd}"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! -d "${resolved_wd}" ]]; then
+            echo "::error::working_directory does not exist: ${wd}"
+            exit 1
+          fi
+
+          wd_rel="${resolved_wd#"${workspace_root}/"}"
+          if [[ "${resolved_wd}" == "${workspace_root}" ]]; then
+            wd_rel="."
+          fi
+
+          if [[ -z "${dockerfile_input}" ]]; then
+            dockerfile_input="./Dockerfile"
+          fi
+
+          if [[ "${dockerfile_input}" = /* ]]; then
+            resolved_dockerfile="${dockerfile_input}"
+          else
+            resolved_dockerfile="$(realpath -m "${resolved_wd}/${dockerfile_input}")"
+          fi
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *)
+              echo "::error::dockerfile_path must stay inside the repository: ${dockerfile_input}"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! -f "${resolved_dockerfile}" ]]; then
+            echo "::error::Dockerfile not found: ${dockerfile_input} (resolved to ${resolved_dockerfile})"
+            exit 1
+          fi
+
+          case "${resolved_dockerfile}" in
+            "${resolved_wd}"/*) ;;
+            *)
+              echo "::error::dockerfile_path must resolve inside working_directory: ${dockerfile_input}"
+              exit 1
+              ;;
+          esac
+
+          dockerfile_rel="${resolved_dockerfile#"${workspace_root}/"}"
+          if [[ "${resolved_dockerfile}" == "${workspace_root}" ]]; then
+            dockerfile_rel="."
+          fi
+
+          if [[ -n "${version_config_input}" ]]; then
+            if [[ "${version_config_input}" = /* ]]; then
+              resolved_version_config="${version_config_input}"
+            else
+              resolved_version_config="$(realpath -m "${GITHUB_WORKSPACE}/${version_config_input}")"
+            fi
+            case "${resolved_version_config}" in
+              "${workspace_root}") ;;
+              "${workspace_root}"/*) ;;
+              *)
+                echo "::error::version_config_path must stay inside the repository: ${version_config_input}"
+                exit 1
+                ;;
+            esac
+
+            version_config_rel="${resolved_version_config#"${workspace_root}/"}"
+            if [[ "${resolved_version_config}" == "${workspace_root}" ]]; then
+              version_config_rel="."
+            fi
+          else
+            version_config_rel=""
+          fi
+
+          echo "working_directory=${wd_rel}" >> "$GITHUB_OUTPUT"
+          echo "dockerfile_path=${dockerfile_rel}" >> "$GITHUB_OUTPUT"
+          echo "version_config_path=${version_config_rel}" >> "$GITHUB_OUTPUT"
+          echo "✅ Path validation complete"
+          echo "📁 Working directory: ${wd_rel}"
+          echo "📄 Dockerfile: ${dockerfile_rel}"
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -230,23 +343,28 @@ jobs:
 
       - name: Check for package.json
         id: check_package_json
+        env:
+          WORKING_DIRECTORY: ${{ steps.validate_paths.outputs.working_directory }}
         run: |
-          if [ -f "./package.json" ]; then
+          if [ -f "${WORKING_DIRECTORY}/package.json" ]; then
             echo "has_package_json=true" >> $GITHUB_OUTPUT
-            echo "📦 Found package.json file"
+            echo "📦 Found package.json file in ${WORKING_DIRECTORY}"
           else
             echo "has_package_json=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No package.json file found"
+            echo "ℹ️ No package.json file found in ${WORKING_DIRECTORY}"
           fi
 
       - name: Get version from package.json
         id: package_version
         if: steps.check_package_json.outputs.has_package_json == 'true'
+        env:
+          WORKING_DIRECTORY: ${{ steps.validate_paths.outputs.working_directory }}
         run: |
           echo "🔍 Extracting version from package.json..."
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📋 Package.json version: $VERSION"
+        working-directory: ${{ steps.validate_paths.outputs.working_directory }}
 
       - name: Determine version source
         id: check_version
@@ -280,7 +398,7 @@ jobs:
         id: check_gitversion_config
         if: steps.check_version.outputs.use_gitversion == 'true'
         env:
-          VERSION_CONFIG_PATH: ${{ steps.store_inputs.outputs.version_config_path }}
+          VERSION_CONFIG_PATH: ${{ steps.validate_paths.outputs.version_config_path }}
         run: |
           if [ -f "${VERSION_CONFIG_PATH}" ]; then
             echo "config_exists=true" >> $GITHUB_OUTPUT
@@ -296,7 +414,7 @@ jobs:
         if: steps.check_version.outputs.use_gitversion == 'true'
         uses: gittools/actions/gitversion/execute@v4
         with:
-          configFilePath: ${{ steps.store_inputs.outputs.version_config_path }}
+          configFilePath: ${{ steps.validate_paths.outputs.version_config_path }}
 
       - name: Determine Branch Information
         id: branches
@@ -550,7 +668,8 @@ jobs:
           VERSION: ${{ steps.set_version.outputs.version }}
           VERSION_SOURCE: ${{ steps.set_version.outputs.version_source }}
           IMAGE_NAME_INPUT: ${{ steps.store_inputs.outputs.image_name }}
-          DOCKERFILE_PATH_INPUT: ${{ steps.store_inputs.outputs.dockerfile_path }}
+          DOCKERFILE_PATH_INPUT: ${{ steps.validate_paths.outputs.dockerfile_path }}
+          WORKING_DIRECTORY_INPUT: ${{ steps.validate_paths.outputs.working_directory }}
           BUILD_PLATFORMS_INPUT: ${{ steps.store_inputs.outputs.build_platforms }}
           BRANCH_NAME_INPUT: ${{ steps.branches.outputs.branch_name }}
           RELEASE_BRANCH_INPUT: ${{ steps.store_inputs.outputs.release_branch }}
@@ -607,6 +726,7 @@ jobs:
 
           echo "🏷️ Version: ${VERSION} (Source: ${VERSION_SOURCE})"
           echo "🔄 Image: ${IMAGE_NAME_INPUT}"
+          echo "📁 Working directory: ${WORKING_DIRECTORY_INPUT}"
           echo "📄 Dockerfile: ${DOCKERFILE_PATH_INPUT}"
           echo "🌐 Platforms: ${BUILD_PLATFORMS_INPUT}"
           echo "🔖 Branch: ${BRANCH_NAME_INPUT}"
@@ -710,6 +830,7 @@ jobs:
     env:
       IMAGE_NAME: ${{ needs.config.outputs.image_name }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
       ENABLE_SECURITY_SCAN: ${{ needs.config.outputs.enable_security_scan }}
@@ -741,11 +862,43 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_TOKEN }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Test Build
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: linux/amd64
           push: false
           load: false
@@ -758,8 +911,8 @@ jobs:
       - name: Single Arch Build Load
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: linux/amd64
           push: false
           load: true
@@ -856,6 +1009,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
       ENABLE_SBOM: ${{ needs.config.outputs.enable_sbom }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -872,12 +1026,12 @@ jobs:
       - name: Check for changes.md
         id: check_changelog
         run: |
-          if [ -f "./changes.md" ]; then
+          if [ -f "${WORKING_DIRECTORY}/changes.md" ]; then
             echo "has_changelog=true" >> $GITHUB_OUTPUT
-            echo "📖 Found changes.md file"
+            echo "📖 Found changes.md file in ${WORKING_DIRECTORY}"
           else
             echo "has_changelog=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes.md file found, will generate changelog from git history"
+            echo "ℹ️ No changes.md file found in ${WORKING_DIRECTORY}, will generate changelog from git history"
           fi
 
       - name: Parse Changelog from changes.md
@@ -886,14 +1040,16 @@ jobs:
         uses: actions/github-script@v8
         env:
           RELEASE_VERSION_INPUT: ${{ env.RELEASE_VERSION }}
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
         with:
           script: |
             const { open } = require('fs/promises');
             const fs = require('fs');
 
             const version = process.env.RELEASE_VERSION_INPUT;
+            const workingDirectory = process.env.WORKING_DIRECTORY_INPUT;
             const delimiter = '### ';
-            const file = await open('./changes.md');
+            const file = await open(`${workingDirectory}/changes.md`);
 
             let description = [];
             let found = false;
@@ -999,6 +1155,7 @@ jobs:
       DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
@@ -1018,6 +1175,38 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Validate image coordinates
         id: validate_image
         run: |
@@ -1031,8 +1220,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
           platforms: linux/amd64
           # Push by digest (no temp arch tags) so only final manifest tags are published.
@@ -1083,6 +1272,7 @@ jobs:
       DOCKER_REPO: ${{ needs.config.outputs.docker_repo }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
@@ -1102,6 +1292,38 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Validate image coordinates
         id: validate_image
         run: |
@@ -1115,8 +1337,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
           platforms: linux/arm64
           # Push by digest (no temp arch tags) so only final manifest tags are published.
@@ -1258,6 +1480,7 @@ jobs:
       GCP_SERVICE_ACCOUNT: ${{ needs.config.outputs.gcp_service_account }}
       IMAGE_NAME: ${{ needs.config.outputs.image_name }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
@@ -1275,6 +1498,38 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -1289,9 +1544,11 @@ jobs:
       - name: Create safe branch name
         if: env.IS_RELEASE_BRANCH == 'false'
         run: |
+          set -euo pipefail
           # Create safe branch name by replacing slashes with dashes
           SAFE_BRANCH_NAME=$(echo "${CURRENT_BRANCH}" | sed 's/\//-/g')
-          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+          [[ "${SAFE_BRANCH_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid safe branch name: ${SAFE_BRANCH_NAME}"; exit 1; }
+          printf 'SAFE_BRANCH_NAME=%s\n' "${SAFE_BRANCH_NAME}" >> "$GITHUB_ENV"
 
       # Delete existing images to prevent orphaned resources
       - name: Delete existing images in Artifact Registry
@@ -1324,6 +1581,7 @@ jobs:
       - name: Prepare GCP Docker tags
         id: prepare_gcp_tags
         run: |
+          set -euo pipefail
           echo "🔄 Preparing GCP Docker tags..."
           # Set tags based on branch
           if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
@@ -1336,14 +1594,15 @@ jobs:
             echo "ℹ️ Feature branch build: Using branch name tag only"
           fi
 
-          echo "GCP_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          [[ "${TAGS}" =~ ^[A-Za-z0-9./,:_-]+$ ]] || { echo "::error::Invalid GCP Docker tags."; exit 1; }
+          printf 'GCP_DOCKER_TAGS=%s\n' "${TAGS}" >> "$GITHUB_ENV"
           echo "✅ GCP Tags prepared: $TAGS"
 
       - name: Push Image
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: ${{ env.BUILD_PLATFORM }}
           push: true
           no-cache: true
@@ -1377,6 +1636,7 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ needs.config.outputs.azure_subscription_id }}
       IMAGE_NAME: ${{ needs.config.outputs.image_name }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
+      WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
@@ -1393,6 +1653,38 @@ jobs:
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate with Azure
         uses: azure/login@v3
@@ -1411,9 +1703,11 @@ jobs:
       - name: Create safe branch name
         if: env.IS_RELEASE_BRANCH == 'false'
         run: |
+          set -euo pipefail
           # Create safe branch name by replacing slashes with dashes
           SAFE_BRANCH_NAME=$(echo "${CURRENT_BRANCH}" | sed 's/\//-/g')
-          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+          [[ "${SAFE_BRANCH_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid safe branch name: ${SAFE_BRANCH_NAME}"; exit 1; }
+          printf 'SAFE_BRANCH_NAME=%s\n' "${SAFE_BRANCH_NAME}" >> "$GITHUB_ENV"
 
       # Delete existing images to prevent orphaned resources
       - name: Delete existing images in ACR
@@ -1447,6 +1741,7 @@ jobs:
       - name: Prepare ACR Docker tags
         id: prepare_acr_tags
         run: |
+          set -euo pipefail
           echo "🔄 Preparing ACR Docker tags..."
           # Set tags based on branch
           if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
@@ -1459,14 +1754,15 @@ jobs:
             echo "ℹ️ Feature branch build: Using branch name tag only"
           fi
 
-          echo "ACR_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          [[ "${TAGS}" =~ ^[A-Za-z0-9./,:_-]+$ ]] || { echo "::error::Invalid ACR Docker tags."; exit 1; }
+          printf 'ACR_DOCKER_TAGS=%s\n' "${TAGS}" >> "$GITHUB_ENV"
           echo "✅ ACR Tags prepared: $TAGS"
 
       - name: Push Image
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: linux/${{ env.BUILD_PLATFORM }}
           push: true
           no-cache: true
