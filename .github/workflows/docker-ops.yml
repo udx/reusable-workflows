@@ -232,6 +232,11 @@ jobs:
           echo "📋 Dockerfile path: ${INPUT_DOCKERFILE_PATH}"
           echo "📋 Working directory: ${INPUT_WORKING_DIRECTORY}"
 
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Validate paths
         id: validate_paths
         env:
@@ -335,11 +340,6 @@ jobs:
           echo "✅ Path validation complete"
           echo "📁 Working directory: ${wd_rel}"
           echo "📄 Dockerfile: ${dockerfile_rel}"
-
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Check for package.json
         id: check_package_json
