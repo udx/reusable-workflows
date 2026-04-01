@@ -883,45 +883,32 @@ jobs:
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
       - name: Test Build
-        env:
-          BUILD_CONTEXT: ${{ steps.validate_build_paths.outputs.context }}
-          BUILD_DOCKERFILE: ${{ steps.validate_build_paths.outputs.dockerfile }}
-        run: |
-          set -euo pipefail
-
-          build_args=()
-          while IFS= read -r line; do
-            [[ -n "${line}" ]] || continue
-            build_args+=(--build-arg "${line}")
-          done <<< "${BUILD_ARGS}"
-
-          docker buildx build \
-            --platform linux/amd64 \
-            --file "${BUILD_DOCKERFILE}" \
-            --tag "${IMAGE_NAME}:${RELEASE_VERSION}" \
-            "${build_args[@]}" \
-            "${BUILD_CONTEXT}"
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: false
+          no-cache: false
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
       - name: Single Arch Build Load
-        env:
-          BUILD_CONTEXT: ${{ steps.validate_build_paths.outputs.context }}
-          BUILD_DOCKERFILE: ${{ steps.validate_build_paths.outputs.dockerfile }}
-        run: |
-          set -euo pipefail
-
-          build_args=()
-          while IFS= read -r line; do
-            [[ -n "${line}" ]] || continue
-            build_args+=(--build-arg "${line}")
-          done <<< "${BUILD_ARGS}"
-
-          docker buildx build \
-            --platform linux/amd64 \
-            --file "${BUILD_DOCKERFILE}" \
-            --tag "${IMAGE_NAME}:${RELEASE_VERSION}" \
-            --load \
-            "${build_args[@]}" \
-            "${BUILD_CONTEXT}"
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          no-cache: false
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
       - name: Install Trivy
         run: |
@@ -1215,35 +1202,20 @@ jobs:
 
       - name: Push Image
         id: build
-        env:
-          BUILD_CONTEXT: ${{ steps.validate_build_paths.outputs.context }}
-          BUILD_DOCKERFILE: ${{ steps.validate_build_paths.outputs.dockerfile }}
-          IMAGE_REF: ${{ steps.validate_image.outputs.image_ref }}
-        run: |
-          set -euo pipefail
-
-          build_args=()
-          while IFS= read -r line; do
-            [[ -n "${line}" ]] || continue
-            build_args+=(--build-arg "${line}")
-          done <<< "${BUILD_ARGS}"
-
-          metadata_file="${RUNNER_TEMP}/build-amd64-metadata.json"
-          docker buildx build \
-            --platform linux/amd64 \
-            --file "${BUILD_DOCKERFILE}" \
-            --output "type=image,push-by-digest=true,name-canonical=true,push=true" \
-            --tag "${IMAGE_REF}" \
-            --sbom=true \
-            --provenance=true \
-            --no-cache \
-            --metadata-file "${metadata_file}" \
-            "${build_args[@]}" \
-            "${BUILD_CONTEXT}"
-
-          BUILD_DIGEST="$(jq -r '."containerimage.digest" // empty' "${metadata_file}")"
-          [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
-          printf 'digest=%s\n' "${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
+          platforms: linux/amd64
+          # Push by digest (no temp arch tags) so only final manifest tags are published.
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ steps.validate_image.outputs.image_ref }}
+          sbom: true
+          provenance: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
 
       - name: Export digest
         env:
@@ -1343,35 +1315,20 @@ jobs:
 
       - name: Push Image
         id: build
-        env:
-          BUILD_CONTEXT: ${{ steps.validate_build_paths.outputs.context }}
-          BUILD_DOCKERFILE: ${{ steps.validate_build_paths.outputs.dockerfile }}
-          IMAGE_REF: ${{ steps.validate_image.outputs.image_ref }}
-        run: |
-          set -euo pipefail
-
-          build_args=()
-          while IFS= read -r line; do
-            [[ -n "${line}" ]] || continue
-            build_args+=(--build-arg "${line}")
-          done <<< "${BUILD_ARGS}"
-
-          metadata_file="${RUNNER_TEMP}/build-arm64-metadata.json"
-          docker buildx build \
-            --platform linux/arm64 \
-            --file "${BUILD_DOCKERFILE}" \
-            --output "type=image,push-by-digest=true,name-canonical=true,push=true" \
-            --tag "${IMAGE_REF}" \
-            --sbom=true \
-            --provenance=true \
-            --no-cache \
-            --metadata-file "${metadata_file}" \
-            "${build_args[@]}" \
-            "${BUILD_CONTEXT}"
-
-          BUILD_DIGEST="$(jq -r '."containerimage.digest" // empty' "${metadata_file}")"
-          [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
-          printf 'digest=%s\n' "${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
+          platforms: linux/arm64
+          # Push by digest (no temp arch tags) so only final manifest tags are published.
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ steps.validate_image.outputs.image_ref }}
+          sbom: true
+          provenance: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
 
       - name: Export digest
         env:
@@ -1618,33 +1575,16 @@ jobs:
           echo "✅ GCP Tags prepared: $TAGS"
 
       - name: Push Image
-        env:
-          BUILD_CONTEXT: ${{ steps.validate_build_paths.outputs.context }}
-          BUILD_DOCKERFILE: ${{ steps.validate_build_paths.outputs.dockerfile }}
-        run: |
-          set -euo pipefail
-
-          build_args=()
-          while IFS= read -r line; do
-            [[ -n "${line}" ]] || continue
-            build_args+=(--build-arg "${line}")
-          done <<< "${BUILD_ARGS}"
-
-          tag_args=()
-          IFS=',' read -ra tags <<< "${GCP_DOCKER_TAGS}"
-          for tag in "${tags[@]}"; do
-            [[ -n "${tag}" ]] || continue
-            tag_args+=(--tag "${tag}")
-          done
-
-          docker buildx build \
-            --platform "${BUILD_PLATFORM}" \
-            --file "${BUILD_DOCKERFILE}" \
-            --push \
-            --no-cache \
-            "${build_args[@]}" \
-            "${tag_args[@]}" \
-            "${BUILD_CONTEXT}"
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.GCP_DOCKER_TAGS }}
 
       - name: Log out from Google Cloud
         run: docker logout
@@ -1791,33 +1731,16 @@ jobs:
           echo "✅ ACR Tags prepared: $TAGS"
 
       - name: Push Image
-        env:
-          BUILD_CONTEXT: ${{ steps.validate_build_paths.outputs.context }}
-          BUILD_DOCKERFILE: ${{ steps.validate_build_paths.outputs.dockerfile }}
-        run: |
-          set -euo pipefail
-
-          build_args=()
-          while IFS= read -r line; do
-            [[ -n "${line}" ]] || continue
-            build_args+=(--build-arg "${line}")
-          done <<< "${BUILD_ARGS}"
-
-          tag_args=()
-          IFS=',' read -ra tags <<< "${ACR_DOCKER_TAGS}"
-          for tag in "${tags[@]}"; do
-            [[ -n "${tag}" ]] || continue
-            tag_args+=(--tag "${tag}")
-          done
-
-          docker buildx build \
-            --platform "linux/${BUILD_PLATFORM}" \
-            --file "${BUILD_DOCKERFILE}" \
-            --push \
-            --no-cache \
-            "${build_args[@]}" \
-            "${tag_args[@]}" \
-            "${BUILD_CONTEXT}"
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          platforms: linux/${{ env.BUILD_PLATFORM }}
+          push: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+          tags: ${{ env.ACR_DOCKER_TAGS }}
 
       - name: Log out from Azure Container Registry
         run: docker logout "${ACR_REGISTRY}"
