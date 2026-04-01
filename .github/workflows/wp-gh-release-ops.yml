@@ -30,12 +30,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 'ref' and 'repository' are required, otherwise repo could appear in detached head state
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.head_ref }}
-          repository: ${{ github.repository }}
+          fetch-depth: 0
 
       # Prepare variables
       - name: Prepare vars
@@ -66,6 +64,20 @@ jobs:
             const branch = `temp-release-${full_tag}`;
             const is_prerelease = !!process.env.PRETAG;
 
+            const versionPattern = /^[A-Za-z0-9._-]+$/;
+            if (!versionPattern.test(version)) {
+              core.setFailed(`Invalid version: ${version}`);
+              return;
+            }
+            if (!versionPattern.test(full_tag)) {
+              core.setFailed(`Invalid release tag: ${full_tag}`);
+              return;
+            }
+            if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
+              core.setFailed(`Invalid branch name: ${branch}`);
+              return;
+            }
+
             core.setOutput('full_tag', full_tag );
             core.setOutput('branch', branch );
             core.setOutput('version', version );
@@ -74,11 +86,13 @@ jobs:
       - name: Parse Changelog Entries
         uses: actions/github-script@v8
         id: changelog
+        env:
+          VERSION_INPUT: ${{ steps.vars.outputs.version }}
         with:
           script: |
             const { open } = require('fs/promises');
 
-            const version = '${{ steps.vars.outputs.version }}';
+            const version = process.env.VERSION_INPUT;
             const delimiter = '#### ';
             const file = await open('./changes.md');
 
@@ -156,11 +170,20 @@ jobs:
       # delete tag if there was an error
       - name: Delete tag on failure
         if: failure()
+        env:
+          FULL_TAG: ${{ steps.vars.outputs.full_tag }}
         run: |
-          git push origin --delete refs/tags/${{ steps.vars.outputs.full_tag }} || true
+          set -euo pipefail
+          [[ "${FULL_TAG}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid tag name: ${FULL_TAG}"; exit 1; }
+          git push origin --delete "refs/tags/${FULL_TAG}" || true
 
       # delete temporary release branch
       - name: Delete temporary release branch
         if: always()
+        env:
+          RELEASE_BRANCH_NAME: ${{ steps.vars.outputs.branch }}
         run: |
-          git push origin --delete ${{ steps.vars.outputs.branch }} || true
+          set -euo pipefail
+          [[ "${RELEASE_BRANCH_NAME}" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::Invalid branch name: ${RELEASE_BRANCH_NAME}"; exit 1; }
+          git check-ref-format --branch "${RELEASE_BRANCH_NAME}" >/dev/null 2>&1 || { echo "::error::Invalid git branch name: ${RELEASE_BRANCH_NAME}"; exit 1; }
+          git push origin --delete "${RELEASE_BRANCH_NAME}" || true

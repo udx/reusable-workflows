@@ -1408,9 +1408,11 @@ jobs:
       - name: Create safe branch name
         if: env.IS_RELEASE_BRANCH == 'false'
         run: |
+          set -euo pipefail
           # Create safe branch name by replacing slashes with dashes
           SAFE_BRANCH_NAME=$(echo "${CURRENT_BRANCH}" | sed 's/\//-/g')
-          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+          [[ "${SAFE_BRANCH_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid safe branch name: ${SAFE_BRANCH_NAME}"; exit 1; }
+          printf 'SAFE_BRANCH_NAME=%s\n' "${SAFE_BRANCH_NAME}" >> "$GITHUB_ENV"
 
       # Delete existing images to prevent orphaned resources
       - name: Delete existing images in Artifact Registry
@@ -1443,6 +1445,7 @@ jobs:
       - name: Prepare GCP Docker tags
         id: prepare_gcp_tags
         run: |
+          set -euo pipefail
           echo "🔄 Preparing GCP Docker tags..."
           # Set tags based on branch
           if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
@@ -1455,7 +1458,8 @@ jobs:
             echo "ℹ️ Feature branch build: Using branch name tag only"
           fi
 
-          echo "GCP_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          [[ "${TAGS}" =~ ^[A-Za-z0-9./,:_-]+$ ]] || { echo "::error::Invalid GCP Docker tags."; exit 1; }
+          printf 'GCP_DOCKER_TAGS=%s\n' "${TAGS}" >> "$GITHUB_ENV"
           echo "✅ GCP Tags prepared: $TAGS"
 
       - name: Push Image
@@ -1531,9 +1535,11 @@ jobs:
       - name: Create safe branch name
         if: env.IS_RELEASE_BRANCH == 'false'
         run: |
+          set -euo pipefail
           # Create safe branch name by replacing slashes with dashes
           SAFE_BRANCH_NAME=$(echo "${CURRENT_BRANCH}" | sed 's/\//-/g')
-          echo "SAFE_BRANCH_NAME=${SAFE_BRANCH_NAME}" >> $GITHUB_ENV
+          [[ "${SAFE_BRANCH_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid safe branch name: ${SAFE_BRANCH_NAME}"; exit 1; }
+          printf 'SAFE_BRANCH_NAME=%s\n' "${SAFE_BRANCH_NAME}" >> "$GITHUB_ENV"
 
       # Delete existing images to prevent orphaned resources
       - name: Delete existing images in ACR
@@ -1567,6 +1573,7 @@ jobs:
       - name: Prepare ACR Docker tags
         id: prepare_acr_tags
         run: |
+          set -euo pipefail
           echo "🔄 Preparing ACR Docker tags..."
           # Set tags based on branch
           if [[ "${IS_RELEASE_BRANCH}" == "true" ]]; then
@@ -1579,7 +1586,8 @@ jobs:
             echo "ℹ️ Feature branch build: Using branch name tag only"
           fi
 
-          echo "ACR_DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+          [[ "${TAGS}" =~ ^[A-Za-z0-9./,:_-]+$ ]] || { echo "::error::Invalid ACR Docker tags."; exit 1; }
+          printf 'ACR_DOCKER_TAGS=%s\n' "${TAGS}" >> "$GITHUB_ENV"
           echo "✅ ACR Tags prepared: $TAGS"
 
       - name: Push Image
