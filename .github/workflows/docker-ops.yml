@@ -293,6 +293,14 @@ jobs:
             exit 1
           fi
 
+          case "${resolved_dockerfile}" in
+            "${resolved_wd}"/*) ;;
+            *)
+              echo "::error::dockerfile_path must resolve inside working_directory: ${dockerfile_input}"
+              exit 1
+              ;;
+          esac
+
           dockerfile_rel="${resolved_dockerfile#"${workspace_root}/"}"
           if [[ "${resolved_dockerfile}" == "${workspace_root}" ]]; then
             dockerfile_rel="."
@@ -878,6 +886,10 @@ jobs:
 
           [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
           [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
 
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
@@ -1187,6 +1199,10 @@ jobs:
 
           [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
           [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
 
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
@@ -1300,6 +1316,10 @@ jobs:
 
           [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
           [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
 
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
@@ -1502,6 +1522,10 @@ jobs:
 
           [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
           [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
 
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
@@ -1654,6 +1678,10 @@ jobs:
 
           [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
           [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+          case "${resolved_dockerfile}" in
+            "${resolved_context}"/*) ;;
+            *) echo "::error::Dockerfile must remain inside the build context: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
 
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
