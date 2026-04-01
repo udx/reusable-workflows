@@ -79,6 +79,7 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `azure_subscription_id`          | Azure Subscription ID for OIDC                    | -                         | For ACR        |
 | **Build**                        |
 | `release_branch`                 | Branch that triggers releases                     | `latest`                  |                |
+| `working_directory`             | Repository subdirectory used as Docker build context and source of `package.json`/`changes.md` | `.` | |
 | `dockerfile_path`                | Path to Dockerfile                                | `./Dockerfile`            |                |
 | `build_platforms`                | Platforms (comma-separated)                       | `linux/amd64,linux/arm64` |                |
 | `build_args`                     | Build args (`ARG1=val1,ARG2=val2`)                | -                         |                |
@@ -128,7 +129,7 @@ This matrix maps each registry type to required caller configuration:
 
 **Auto-detection:**
 
-1. If `package.json` exists → version from it
+1. If `working_directory/package.json` exists → version from it
 2. Otherwise → GitVersion (requires config at `version_config_path`)
 
 **Build arg placeholders:**
@@ -137,6 +138,30 @@ This matrix maps each registry type to required caller configuration:
 - `{{branch}}` → Current branch
 
 Example: `build_args: "VERSION={{version}},ENV=production"`
+
+### Subdirectory Repositories
+
+Use `working_directory` when your repository contains multiple functions or services and each one has its own `package.json`, `changes.md`, and Docker build context.
+
+`dockerfile_path` is resolved from `working_directory` when you pass a relative path.
+
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: sql-ops
+      working_directory: functions/sqlOps
+      dockerfile_path: Dockerfile
+      docker_login: myusername
+      docker_org: myorg
+      docker_repo: sql-ops
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
+```
 
 ## Publishing
 

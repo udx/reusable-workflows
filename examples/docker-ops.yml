@@ -14,6 +14,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      working_directory: .
       # Set to "false" for repos that need to avoid GitHub Actions cache usage.
       enable_cache: "true"
       docker_login: ${{ vars.DOCKER_USERNAME }}
@@ -33,6 +34,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      working_directory: .
       enable_cache: "true"
       gcp_region: ${{ vars.GCP_REGION }}
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
@@ -51,6 +53,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      working_directory: .
       enable_cache: "true"
       acr_registry: ${{ vars.ACR_REGISTRY }}
       acr_repository: ${{ vars.ACR_REPOSITORY }}
@@ -69,6 +72,7 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
     with:
       image_name: ${{ vars.IMAGE_NAME }}
+      working_directory: .
       enable_cache: "true"
       # Docker Hub
       docker_login: ${{ vars.DOCKER_USERNAME }}
@@ -89,6 +93,25 @@ jobs:
     secrets:
       docker_token: ${{ secrets.DOCKER_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ===========================================================================
+  # Multi-function repo: function-subdir
+  # USE CASE: Function-specific build from a repository subdirectory
+  # ===========================================================================
+  function-subdir:
+    permissions:
+      id-token: write
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: sql-ops
+      working_directory: functions/sqlOps
+      dockerfile_path: Dockerfile
+      docker_login: ${{ vars.DOCKER_USERNAME }}
+      docker_org: ${{ vars.DOCKER_ORG }}
+      docker_repo: sql-ops
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
 
 # Full Documentation:
 #   - See docs/workflows/docker-ops.md for complete setup guides, troubleshooting, and best practices
