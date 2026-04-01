@@ -854,11 +854,39 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_TOKEN }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Test Build
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.WORKING_DIRECTORY }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: linux/amd64
           push: false
           load: false
@@ -871,8 +899,8 @@ jobs:
       - name: Single Arch Build Load
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.WORKING_DIRECTORY }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: linux/amd64
           push: false
           load: true
@@ -1135,6 +1163,34 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Validate image coordinates
         id: validate_image
         run: |
@@ -1148,8 +1204,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.WORKING_DIRECTORY }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
           platforms: linux/amd64
           # Push by digest (no temp arch tags) so only final manifest tags are published.
@@ -1220,6 +1276,34 @@ jobs:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Validate image coordinates
         id: validate_image
         run: |
@@ -1233,8 +1317,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.WORKING_DIRECTORY }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
           platforms: linux/arm64
           # Push by digest (no temp arch tags) so only final manifest tags are published.
@@ -1394,6 +1478,34 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
 
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
+
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -1465,8 +1577,8 @@ jobs:
       - name: Push Image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.WORKING_DIRECTORY }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: ${{ env.BUILD_PLATFORM }}
           push: true
           no-cache: true
@@ -1517,6 +1629,34 @@ jobs:
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Validate build paths
+        id: validate_build_paths
+        env:
+          WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
+          DOCKERFILE_PATH_INPUT: ${{ env.DOCKERFILE_PATH }}
+        run: |
+          set -euo pipefail
+          workspace_root="$(realpath "${GITHUB_WORKSPACE}")"
+          resolved_context="$(realpath -m "${GITHUB_WORKSPACE}/${WORKING_DIRECTORY_INPUT}")"
+          resolved_dockerfile="$(realpath -m "${GITHUB_WORKSPACE}/${DOCKERFILE_PATH_INPUT}")"
+
+          case "${resolved_context}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid build context path: ${WORKING_DIRECTORY_INPUT}"; exit 1 ;;
+          esac
+          case "${resolved_dockerfile}" in
+            "${workspace_root}") ;;
+            "${workspace_root}"/*) ;;
+            *) echo "::error::Invalid Dockerfile path: ${DOCKERFILE_PATH_INPUT}"; exit 1 ;;
+          esac
+
+          [[ -d "${resolved_context}" ]] || { echo "::error::Build context directory not found: ${WORKING_DIRECTORY_INPUT}"; exit 1; }
+          [[ -f "${resolved_dockerfile}" ]] || { echo "::error::Dockerfile not found: ${DOCKERFILE_PATH_INPUT}"; exit 1; }
+
+          printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
+          printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate with Azure
         uses: azure/login@v3
@@ -1593,8 +1733,8 @@ jobs:
       - name: Push Image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.WORKING_DIRECTORY }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           platforms: linux/${{ env.BUILD_PLATFORM }}
           push: true
           no-cache: true
