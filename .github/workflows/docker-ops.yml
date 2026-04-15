@@ -1545,10 +1545,11 @@ jobs:
       - name: Validate GCP coordinates
         run: |
           set -euo pipefail
-          [[ "${GCP_REGION}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_region: ${GCP_REGION}"; exit 1; }
-          [[ "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_project_id: ${GCP_PROJECT_ID}"; exit 1; }
-          [[ "${GCP_REPO}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid gcp_repo: ${GCP_REPO}"; exit 1; }
-          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: ${IMAGE_NAME}"; exit 1; }
+          sanitize() { local v="$1"; v=${v//'%'/'%25'}; v=${v//$'\r'/'%0D'}; v=${v//$'\n'/'%0A'}; printf '%s' "${v}"; }
+          [[ "${GCP_REGION}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_region: $(sanitize "${GCP_REGION}")"; exit 1; }
+          [[ "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_project_id: $(sanitize "${GCP_PROJECT_ID}")"; exit 1; }
+          [[ "${GCP_REPO}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid gcp_repo: $(sanitize "${GCP_REPO}")"; exit 1; }
+          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: $(sanitize "${IMAGE_NAME}")"; exit 1; }
 
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
@@ -1709,9 +1710,10 @@ jobs:
       - name: Validate ACR coordinates
         run: |
           set -euo pipefail
-          [[ "${ACR_REGISTRY}" =~ ^[a-z0-9]+\.[a-z0-9.-]+$ ]] || { echo "::error::Invalid acr_registry: ${ACR_REGISTRY}"; exit 1; }
-          [[ "${ACR_REPOSITORY}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid acr_repository: ${ACR_REPOSITORY}"; exit 1; }
-          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: ${IMAGE_NAME}"; exit 1; }
+          sanitize() { local v="$1"; v=${v//'%'/'%25'}; v=${v//$'\r'/'%0D'}; v=${v//$'\n'/'%0A'}; printf '%s' "${v}"; }
+          [[ "${ACR_REGISTRY}" =~ ^[a-z0-9]+\.[a-z0-9.-]+$ ]] || { echo "::error::Invalid acr_registry: $(sanitize "${ACR_REGISTRY}")"; exit 1; }
+          [[ "${ACR_REPOSITORY}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid acr_repository: $(sanitize "${ACR_REPOSITORY}")"; exit 1; }
+          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: $(sanitize "${IMAGE_NAME}")"; exit 1; }
 
       - name: Authenticate with Azure
         uses: azure/login@v3
@@ -1752,14 +1754,14 @@ jobs:
           echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
 
           # Check if the tag exists
-          TAG_EXISTS=$(az acr repository show-tags --name ${REGISTRY_NAME} --repository ${REPOSITORY} --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
+          TAG_EXISTS=$(az acr repository show-tags --name "${REGISTRY_NAME}" --repository "${REPOSITORY}" --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
 
           if [ -n "${TAG_EXISTS}" ]; then
             echo "ℹ️ Found existing image with tag: ${TAG}"
 
             # Delete the image by tag
             echo "🗑️ Deleting previous image by tag..."
-            az acr repository delete --name ${REGISTRY_NAME} --image ${REPOSITORY}:${TAG} --yes
+            az acr repository delete --name "${REGISTRY_NAME}" --image "${REPOSITORY}:${TAG}" --yes
 
             echo "✅ Previous image deletion completed"
           else
@@ -1835,6 +1837,7 @@ jobs:
       DOCKER_ENABLED: ${{ needs.config.outputs.docker_has_publish_config }}
       GCP_ENABLED: ${{ needs.config.outputs.gcp_has_credentials }}
       ACR_ENABLED: ${{ needs.config.outputs.acr_has_credentials }}
+      GITHUB_RELEASE_ENABLED: ${{ needs.github-release.result == 'success' }}
     steps:
       - name: Generate notification message
         id: generate_message
@@ -1842,6 +1845,11 @@ jobs:
           echo "🔄 Generating notification message..."
 
           # Create simplified JSON payload for Slack notification using a more reliable approach
+          RELEASE_LINKS="*Release Links:*"
+          if [ "$GITHUB_RELEASE_ENABLED" = "true" ]; then
+            RELEASE_LINKS="${RELEASE_LINKS}\n• <https://github.com/${GITHUB_REPO}/releases/tag/${RELEASE_VERSION}|GitHub Release>"
+          fi
+
           cat << EOF > payload.json
           {
             "text": "🚀 New release of ${IMAGE_NAME} v${RELEASE_VERSION} is available!",
@@ -1864,7 +1872,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Release Links:*\n• <https://github.com/${GITHUB_REPO}/releases/tag/${RELEASE_VERSION}|GitHub Release>"
+                  "text": "${RELEASE_LINKS}"
                 }
               }
             ]
