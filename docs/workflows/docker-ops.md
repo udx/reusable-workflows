@@ -89,6 +89,7 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `enable_security_upload`         | Upload to GitHub Security                         | `true`                    |                |
 | `enable_sbom`                    | Generate and upload SBOM                          | `true`                    |                |
 | `enable_cache`                   | Allow GitHub Actions-backed caches for Buildx/Trivy | `true`                  |                |
+| `enable_github_release`          | Create GitHub Release with tag and changelog       | `true`                    |                |
 
 ### Secrets
 
@@ -167,7 +168,7 @@ jobs:
 
 | Target             | When                     | Tags                                                     | Requirements                                                                                        |
 | ------------------ | ------------------------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **GitHub Release** | Release branch           | Version tag                                              | None                                                                                                |
+| **GitHub Release** | Release branch           | Version tag                                              | `enable_github_release` != `"false"`                                                                |
 | **Docker Hub**     | Release branch           | `version`, `latest`                                      | `docker_login`, `docker_org`, `docker_repo`, `docker_token`                                         |
 | **GCP**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `gcp_region`, `gcp_project_id`, `gcp_repo`, `gcp_workload_identity_provider`, `gcp_service_account` |
 | **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id`     |
