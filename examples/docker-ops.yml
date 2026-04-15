@@ -95,6 +95,27 @@ jobs:
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # ===========================================================================
+  # Multi-function repo: no-github-release
+  # USE CASE: Skip GitHub Release (e.g., multi-function repos where another
+  #           job handles the release, or GCP/ACR-only publishing)
+  # ===========================================================================
+  no-github-release:
+    permissions:
+      id-token: write
+      contents: write
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: ${{ vars.IMAGE_NAME }}
+      working_directory: functions/sqlOps
+      dockerfile_path: Dockerfile
+      enable_github_release: "false"
+      gcp_region: ${{ vars.GCP_REGION }}
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gcp_repo: ${{ vars.GCP_REPO }}
+      gcp_workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      gcp_service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+  # ===========================================================================
   # Multi-function repo: function-subdir
   # USE CASE: Function-specific build from a repository subdirectory
   # ===========================================================================

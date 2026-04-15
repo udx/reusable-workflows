@@ -98,6 +98,11 @@ on:
         required: false
         default: "true"
         type: string
+      enable_github_release:
+        description: "Whether to create a GitHub Release with tag and changelog on release branches (default: true)"
+        required: false
+        default: "true"
+        type: string
       docker_login:
         description: "Docker Hub: Username (Required if publishing to Docker Hub)"
         required: false
@@ -168,6 +173,7 @@ jobs:
       enable_security_upload: ${{ steps.store_inputs.outputs.enable_security_upload }}
       enable_sbom: ${{ steps.store_inputs.outputs.enable_sbom }}
       enable_cache: ${{ steps.store_inputs.outputs.enable_cache }}
+      enable_github_release: ${{ steps.store_inputs.outputs.enable_github_release }}
 
     steps:
       - name: Store inputs as outputs
@@ -193,6 +199,7 @@ jobs:
           INPUT_ENABLE_SECURITY_SCAN: ${{ inputs.enable_security_scan }}
           INPUT_ENABLE_SECURITY_UPLOAD: ${{ inputs.enable_security_upload }}
           INPUT_ENABLE_CACHE: ${{ inputs.enable_cache }}
+          INPUT_ENABLE_GITHUB_RELEASE: ${{ inputs.enable_github_release }}
         run: |
           echo "🔄 Processing workflow inputs..."
           # Store all workflow inputs as outputs
@@ -224,6 +231,7 @@ jobs:
           printf 'enable_security_scan=%s\n' "${INPUT_ENABLE_SECURITY_SCAN}" >> "$GITHUB_OUTPUT"
           printf 'enable_security_upload=%s\n' "${INPUT_ENABLE_SECURITY_UPLOAD}" >> "$GITHUB_OUTPUT"
           printf 'enable_cache=%s\n' "${INPUT_ENABLE_CACHE}" >> "$GITHUB_OUTPUT"
+          printf 'enable_github_release=%s\n' "${INPUT_ENABLE_GITHUB_RELEASE}" >> "$GITHUB_OUTPUT"
 
           # Log stored inputs
           echo "✅ All workflow inputs stored as outputs"
@@ -1002,7 +1010,8 @@ jobs:
     if: |
       always() &&
       success() &&
-      needs.config.outputs.is_release_branch == 'true'
+      needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.enable_github_release != 'false'
     permissions:
       contents: write
     env:
@@ -1142,7 +1151,8 @@ jobs:
     needs: [config, github-release]
     if: |
       always() &&
-      success() &&
+      needs.config.result == 'success' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.is_release_branch == 'true'
@@ -1259,7 +1269,8 @@ jobs:
     needs: [config, github-release]
     if: |
       always() &&
-      success() &&
+      needs.config.result == 'success' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.is_release_branch == 'true'
@@ -1375,7 +1386,8 @@ jobs:
     needs: [config, github-release, build-amd64, build-arm64]
     if: |
       always() &&
-      success() &&
+      needs.config.result == 'success' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.is_release_branch == 'true' &&
@@ -1530,6 +1542,14 @@ jobs:
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
+      - name: Validate GCP coordinates
+        run: |
+          set -euo pipefail
+          [[ "${GCP_REGION}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_region: ${GCP_REGION}"; exit 1; }
+          [[ "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_project_id: ${GCP_PROJECT_ID}"; exit 1; }
+          [[ "${GCP_REPO}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid gcp_repo: ${GCP_REPO}"; exit 1; }
+          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: ${IMAGE_NAME}"; exit 1; }
+
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -1563,14 +1583,14 @@ jobs:
           echo "ℹ️ Looking for tag: ${TAG} in ${IMAGE_PATH}"
 
           # Get the digest for the tag using tags list command
-          DIGEST=$(gcloud artifacts docker tags list ${IMAGE_PATH} | grep -w "${TAG}" | awk '{print $3}' 2>/dev/null || echo "")
+          DIGEST=$(gcloud artifacts docker tags list "${IMAGE_PATH}" | grep -w "${TAG}" | awk '{print $3}' 2>/dev/null || echo "")
 
           if [ -n "${DIGEST}" ]; then
             echo "ℹ️ Found existing image with digest: ${DIGEST}"
 
             # Delete the image by digest
             echo "🗑️ Deleting previous image by digest..."
-            gcloud artifacts docker images delete ${IMAGE_PATH}@${DIGEST} --delete-tags --quiet
+            gcloud artifacts docker images delete "${IMAGE_PATH}@${DIGEST}" --delete-tags --quiet
 
             echo "✅ Previous image deletion completed"
           else
@@ -1686,6 +1706,13 @@ jobs:
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
+      - name: Validate ACR coordinates
+        run: |
+          set -euo pipefail
+          [[ "${ACR_REGISTRY}" =~ ^[a-z0-9]+\.[a-z0-9.-]+$ ]] || { echo "::error::Invalid acr_registry: ${ACR_REGISTRY}"; exit 1; }
+          [[ "${ACR_REPOSITORY}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid acr_repository: ${ACR_REPOSITORY}"; exit 1; }
+          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: ${IMAGE_NAME}"; exit 1; }
+
       - name: Authenticate with Azure
         uses: azure/login@v3
         with:
@@ -1695,8 +1722,10 @@ jobs:
 
       - name: Log in to Azure Container Registry
         run: |
+          set -euo pipefail
           REGISTRY_NAME=$(echo "${ACR_REGISTRY}" | cut -d'.' -f1)
-          TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
+          [[ "${REGISTRY_NAME}" =~ ^[a-z0-9]+$ ]] || { echo "::error::Invalid registry name: ${REGISTRY_NAME}"; exit 1; }
+          TOKEN=$(az acr login --name "${REGISTRY_NAME}" --expose-token --output tsv --query accessToken)
           echo "${TOKEN}" | docker login "${ACR_REGISTRY}" --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       # Create safe branch name for feature branches
@@ -1784,9 +1813,9 @@ jobs:
         azure-container-registry-release,
       ]
     if: |
-      always() && 
+      always() &&
       needs.config.outputs.has_slack_webhook == 'true' &&
-      needs.github-release.result == 'success' &&
+      (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') &&
       (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
       (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
