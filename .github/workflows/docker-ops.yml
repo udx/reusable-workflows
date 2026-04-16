@@ -1046,7 +1046,7 @@ jobs:
       - name: Parse Changelog from changes.md
         id: parse_changelog
         if: steps.check_changelog.outputs.has_changelog == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           RELEASE_VERSION_INPUT: ${{ env.RELEASE_VERSION }}
           WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}

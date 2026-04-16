@@ -401,7 +401,7 @@ jobs:
       - name: Check if release already exists
         id: check_release
         if: steps.branches.outputs.is_release_branch == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PACKAGE_VERSION: ${{ steps.pkg.outputs.package_version }}
         with:

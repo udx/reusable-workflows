@@ -132,7 +132,7 @@ jobs:
 
       - name: Parse Changelog
         id: changelog
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           RELEASE_VERSION: ${{ steps.package_version.outputs.release_version }}
         with:
