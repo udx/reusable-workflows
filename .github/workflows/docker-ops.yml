@@ -1046,7 +1046,7 @@ jobs:
       - name: Parse Changelog from changes.md
         id: parse_changelog
         if: steps.check_changelog.outputs.has_changelog == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           RELEASE_VERSION_INPUT: ${{ env.RELEASE_VERSION }}
           WORKING_DIRECTORY_INPUT: ${{ env.WORKING_DIRECTORY }}
@@ -1136,7 +1136,7 @@ jobs:
           git push origin "${RELEASE_VERSION}"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           name: ${{ env.RELEASE_VERSION }}
@@ -1542,15 +1542,6 @@ jobs:
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
-      - name: Validate GCP coordinates
-        run: |
-          set -euo pipefail
-          sanitize() { local v="$1"; v=${v//'%'/'%25'}; v=${v//$'\r'/'%0D'}; v=${v//$'\n'/'%0A'}; printf '%s' "${v}"; }
-          [[ "${GCP_REGION}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_region: $(sanitize "${GCP_REGION}")"; exit 1; }
-          [[ "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]+$ ]] || { echo "::error::Invalid gcp_project_id: $(sanitize "${GCP_PROJECT_ID}")"; exit 1; }
-          [[ "${GCP_REPO}" =~ ^[a-z0-9._-]+$ ]] || { echo "::error::Invalid gcp_repo: $(sanitize "${GCP_REPO}")"; exit 1; }
-          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: $(sanitize "${IMAGE_NAME}")"; exit 1; }
-
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -1584,14 +1575,14 @@ jobs:
           echo "ℹ️ Looking for tag: ${TAG} in ${IMAGE_PATH}"
 
           # Get the digest for the tag using tags list command
-          DIGEST=$(gcloud artifacts docker tags list "${IMAGE_PATH}" | grep -w "${TAG}" | awk '{print $3}' 2>/dev/null || echo "")
+          DIGEST=$(gcloud artifacts docker tags list ${IMAGE_PATH} | grep -w "${TAG}" | awk '{print $3}' 2>/dev/null || echo "")
 
           if [ -n "${DIGEST}" ]; then
             echo "ℹ️ Found existing image with digest: ${DIGEST}"
 
             # Delete the image by digest
             echo "🗑️ Deleting previous image by digest..."
-            gcloud artifacts docker images delete "${IMAGE_PATH}@${DIGEST}" --delete-tags --quiet
+            gcloud artifacts docker images delete ${IMAGE_PATH}@${DIGEST} --delete-tags --quiet
 
             echo "✅ Previous image deletion completed"
           else
@@ -1707,14 +1698,6 @@ jobs:
           printf 'context=%s\n' "${resolved_context}" >> "$GITHUB_OUTPUT"
           printf 'dockerfile=%s\n' "${resolved_dockerfile}" >> "$GITHUB_OUTPUT"
 
-      - name: Validate ACR coordinates
-        run: |
-          set -euo pipefail
-          sanitize() { local v="$1"; v=${v//'%'/'%25'}; v=${v//$'\r'/'%0D'}; v=${v//$'\n'/'%0A'}; printf '%s' "${v}"; }
-          [[ "${ACR_REGISTRY}" =~ ^[a-z0-9]+\.[a-z0-9.-]+$ ]] || { echo "::error::Invalid acr_registry: $(sanitize "${ACR_REGISTRY}")"; exit 1; }
-          [[ "${ACR_REPOSITORY}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid acr_repository: $(sanitize "${ACR_REPOSITORY}")"; exit 1; }
-          [[ "${IMAGE_NAME}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid image_name: $(sanitize "${IMAGE_NAME}")"; exit 1; }
-
       - name: Authenticate with Azure
         uses: azure/login@v3
         with:
@@ -1724,10 +1707,8 @@ jobs:
 
       - name: Log in to Azure Container Registry
         run: |
-          set -euo pipefail
           REGISTRY_NAME=$(echo "${ACR_REGISTRY}" | cut -d'.' -f1)
-          [[ "${REGISTRY_NAME}" =~ ^[a-z0-9]+$ ]] || { echo "::error::Invalid registry name: ${REGISTRY_NAME}"; exit 1; }
-          TOKEN=$(az acr login --name "${REGISTRY_NAME}" --expose-token --output tsv --query accessToken)
+          TOKEN=$(az acr login --name ${REGISTRY_NAME} --expose-token --output tsv --query accessToken)
           echo "${TOKEN}" | docker login "${ACR_REGISTRY}" --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       # Create safe branch name for feature branches
@@ -1754,14 +1735,14 @@ jobs:
           echo "ℹ️ Looking for tag: ${TAG} in ${REGISTRY_NAME}/${REPOSITORY}"
 
           # Check if the tag exists
-          TAG_EXISTS=$(az acr repository show-tags --name "${REGISTRY_NAME}" --repository "${REPOSITORY}" --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
+          TAG_EXISTS=$(az acr repository show-tags --name ${REGISTRY_NAME} --repository ${REPOSITORY} --output tsv 2>/dev/null | grep -w "^${TAG}$" || echo "")
 
           if [ -n "${TAG_EXISTS}" ]; then
             echo "ℹ️ Found existing image with tag: ${TAG}"
 
             # Delete the image by tag
             echo "🗑️ Deleting previous image by tag..."
-            az acr repository delete --name "${REGISTRY_NAME}" --image "${REPOSITORY}:${TAG}" --yes
+            az acr repository delete --name ${REGISTRY_NAME} --image ${REPOSITORY}:${TAG} --yes
 
             echo "✅ Previous image deletion completed"
           else
