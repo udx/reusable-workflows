@@ -163,6 +163,8 @@ jobs:
       dockerfile_path: ${{ steps.validate_paths.outputs.dockerfile_path }}
       working_directory: ${{ steps.validate_paths.outputs.working_directory }}
       build_platforms: ${{ steps.store_inputs.outputs.build_platforms }}
+      build_amd64_enabled: ${{ steps.resolve_build_platforms.outputs.build_amd64_enabled }}
+      build_arm64_enabled: ${{ steps.resolve_build_platforms.outputs.build_arm64_enabled }}
       build_args: ${{ steps.parse_build_args.outputs.build_args }}
 
       # Notification configuration
@@ -671,6 +673,52 @@ jobs:
             echo "ℹ️ No build arguments provided"
           fi
 
+      - name: Resolve build platforms
+        id: resolve_build_platforms
+        env:
+          BUILD_PLATFORMS_INPUT: ${{ steps.store_inputs.outputs.build_platforms }}
+        run: |
+          set -euo pipefail
+          normalized_platforms="$(echo "${BUILD_PLATFORMS_INPUT}" | tr -d '[:space:]')"
+
+          if [[ -z "${normalized_platforms}" ]]; then
+            echo "::error::build_platforms must include at least one supported platform."
+            exit 1
+          fi
+
+          amd64_enabled="false"
+          arm64_enabled="false"
+
+          IFS=',' read -r -a platform_array <<< "${normalized_platforms}"
+          for platform in "${platform_array[@]}"; do
+            case "${platform}" in
+              linux/amd64)
+                amd64_enabled="true"
+                ;;
+              linux/arm64)
+                arm64_enabled="true"
+                ;;
+              "")
+                ;;
+              *)
+                echo "::error::Unsupported build platform: ${platform}. Supported values: linux/amd64, linux/arm64"
+                exit 1
+                ;;
+            esac
+          done
+
+          if [[ "${amd64_enabled}" != "true" && "${arm64_enabled}" != "true" ]]; then
+            echo "::error::build_platforms must include at least one supported platform."
+            exit 1
+          fi
+
+          printf 'build_amd64_enabled=%s\n' "${amd64_enabled}" >> "$GITHUB_OUTPUT"
+          printf 'build_arm64_enabled=%s\n' "${arm64_enabled}" >> "$GITHUB_OUTPUT"
+
+          echo "✅ Build platforms resolved"
+          echo "ℹ️ linux/amd64 enabled: ${amd64_enabled}"
+          echo "ℹ️ linux/arm64 enabled: ${arm64_enabled}"
+
       - name: Summarize Configuration
         env:
           VERSION: ${{ steps.set_version.outputs.version }}
@@ -691,6 +739,8 @@ jobs:
           ENABLE_SECURITY_SCAN_INPUT: ${{ steps.store_inputs.outputs.enable_security_scan }}
           ENABLE_SECURITY_UPLOAD_INPUT: ${{ steps.store_inputs.outputs.enable_security_upload }}
           ENABLE_CACHE_INPUT: ${{ steps.store_inputs.outputs.enable_cache }}
+          BUILD_AMD64_ENABLED_INPUT: ${{ steps.resolve_build_platforms.outputs.build_amd64_enabled }}
+          BUILD_ARM64_ENABLED_INPUT: ${{ steps.resolve_build_platforms.outputs.build_arm64_enabled }}
         run: |
           echo "📋 Build Configuration Summary"
           echo "----------------------------"
@@ -737,6 +787,8 @@ jobs:
           echo "📁 Working directory: ${WORKING_DIRECTORY_INPUT}"
           echo "📄 Dockerfile: ${DOCKERFILE_PATH_INPUT}"
           echo "🌐 Platforms: ${BUILD_PLATFORMS_INPUT}"
+          echo "🏗️ linux/amd64 build: ${BUILD_AMD64_ENABLED_INPUT}"
+          echo "🏗️ linux/arm64 build: ${BUILD_ARM64_ENABLED_INPUT}"
           echo "🔖 Branch: ${BRANCH_NAME_INPUT}"
           echo "🚀 Release Branch: ${RELEASE_BRANCH_INPUT} (${RELEASE_BRANCH_STATUS})"
           echo "🔄 Trigger: ${EVENT_NAME_INPUT}"
@@ -1155,6 +1207,7 @@ jobs:
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
+      needs.config.outputs.build_amd64_enabled == 'true' &&
       needs.config.outputs.is_release_branch == 'true'
     permissions:
       contents: write
@@ -1273,6 +1326,7 @@ jobs:
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
+      needs.config.outputs.build_arm64_enabled == 'true' &&
       needs.config.outputs.is_release_branch == 'true'
     permissions:
       contents: write
@@ -1391,8 +1445,9 @@ jobs:
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.is_release_branch == 'true' &&
-      needs.build-amd64.result == 'success' &&
-      needs.build-arm64.result == 'success'
+      (needs.config.outputs.build_amd64_enabled == 'true' || needs.config.outputs.build_arm64_enabled == 'true') &&
+      (needs.config.outputs.build_amd64_enabled != 'true' || needs.build-amd64.result == 'success') &&
+      (needs.config.outputs.build_arm64_enabled != 'true' || needs.build-arm64.result == 'success')
     permissions:
       contents: write
     env:
