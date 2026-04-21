@@ -81,7 +81,7 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `release_branch`                 | Branch that triggers releases                     | `latest`                  |                |
 | `working_directory`             | Repository subdirectory used as Docker build context and source of `package.json`/`changes.md` | `.` | |
 | `dockerfile_path`                | Path to Dockerfile                                | `./Dockerfile`            |                |
-| `build_platforms`                | Platforms (comma-separated)                       | `linux/amd64,linux/arm64` |                |
+| `build_platforms`                | Comma-separated platforms to publish for Docker Hub (`linux/amd64`, `linux/arm64`) | `linux/amd64,linux/arm64` |                |
 | `build_args`                     | Build args (`ARG1=val1,ARG2=val2`)                | -                         |                |
 | `version_config_path`            | GitVersion config path                            | `ci/git-version.yml`      |                |
 | **Security**                     |
@@ -175,10 +175,27 @@ jobs:
 | **Slack**          | After release            | -                                                        | `slack_webhook_url`                                                                                 |
 
 **Docker Hub release tags:**
-- `linux/amd64` and `linux/arm64` are built natively on matching runners (no QEMU/binfmt emulation), then merged into final multi-arch tags
+- `build_platforms` controls which native Docker Hub architecture jobs run
+- `linux/amd64` and `linux/arm64` are built natively on matching runners (no QEMU/binfmt emulation)
 - Release runs publish only the final tags (`version`, `latest`)
-- Each final tag is a multi-arch manifest including `linux/amd64` and `linux/arm64`
+- The final manifest includes only the architectures requested in `build_platforms`
 - Architecture-suffixed release tags (for example `-amd64` / `-arm64`) are not published
+
+Example: disable arm64 when no arm runner is available.
+
+```yaml
+jobs:
+  release:
+    uses: udx/reusable-workflows/.github/workflows/docker-ops.yml@master
+    with:
+      image_name: my-app
+      docker_login: myusername
+      docker_org: myorg
+      docker_repo: my-app
+      build_platforms: linux/amd64
+    secrets:
+      docker_token: ${{ secrets.DOCKER_TOKEN }}
+```
 
 ## Security & Changelog
 
