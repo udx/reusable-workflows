@@ -699,6 +699,8 @@ jobs:
                 arm64_enabled="true"
                 ;;
               "")
+                echo "::error::Empty build platform entry detected. Check build_platforms for extra commas."
+                exit 1
                 ;;
               *)
                 echo "::error::Unsupported build platform: ${platform}. Supported values: linux/amd64, linux/arm64"
