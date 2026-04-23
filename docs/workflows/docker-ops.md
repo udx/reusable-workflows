@@ -81,7 +81,7 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `release_branch`                 | Branch that triggers releases                     | `latest`                  |                |
 | `working_directory`             | Repository subdirectory used as Docker build context and source of `package.json`/`changes.md` | `.` | |
 | `dockerfile_path`                | Path to Dockerfile                                | `./Dockerfile`            |                |
-| `build_platforms`                | Comma-separated platforms to publish for Docker Hub (`linux/amd64`, `linux/arm64`) | `linux/amd64,linux/arm64` |                |
+| `build_platforms`                | Comma-separated platforms to publish for Docker Hub (`linux/amd64`, `linux/arm64`). Single-platform releases push tags directly; multi-platform releases create a manifest list. | `linux/amd64,linux/arm64` |                |
 | `build_args`                     | Build args (`ARG1=val1,ARG2=val2`)                | -                         |                |
 | `version_config_path`            | GitVersion config path                            | `ci/git-version.yml`      |                |
 | **Security**                     |

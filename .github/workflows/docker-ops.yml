@@ -165,6 +165,7 @@ jobs:
       build_platforms: ${{ steps.store_inputs.outputs.build_platforms }}
       build_amd64_enabled: ${{ steps.resolve_build_platforms.outputs.build_amd64_enabled }}
       build_arm64_enabled: ${{ steps.resolve_build_platforms.outputs.build_arm64_enabled }}
+      manifest_required: ${{ steps.resolve_build_platforms.outputs.manifest_required }}
       build_args: ${{ steps.parse_build_args.outputs.build_args }}
 
       # Notification configuration
@@ -688,7 +689,6 @@ jobs:
 
           amd64_enabled="false"
           arm64_enabled="false"
-
           IFS=',' read -r -a platform_array <<< "${normalized_platforms}"
           for platform in "${platform_array[@]}"; do
             case "${platform}" in
@@ -714,12 +714,22 @@ jobs:
             exit 1
           fi
 
+          platform_count=0
+          [[ "${amd64_enabled}" == "true" ]] && platform_count=$((platform_count + 1))
+          [[ "${arm64_enabled}" == "true" ]] && platform_count=$((platform_count + 1))
+
           printf 'build_amd64_enabled=%s\n' "${amd64_enabled}" >> "$GITHUB_OUTPUT"
           printf 'build_arm64_enabled=%s\n' "${arm64_enabled}" >> "$GITHUB_OUTPUT"
+          if [[ "${platform_count}" -gt 1 ]]; then
+            printf 'manifest_required=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'manifest_required=false\n' >> "$GITHUB_OUTPUT"
+          fi
 
           echo "✅ Build platforms resolved"
           echo "ℹ️ linux/amd64 enabled: ${amd64_enabled}"
           echo "ℹ️ linux/arm64 enabled: ${arm64_enabled}"
+          echo "ℹ️ multi-arch manifest required: $([[ "${platform_count}" -gt 1 ]] && echo true || echo false)"
 
       - name: Summarize Configuration
         env:
@@ -743,6 +753,7 @@ jobs:
           ENABLE_CACHE_INPUT: ${{ steps.store_inputs.outputs.enable_cache }}
           BUILD_AMD64_ENABLED_INPUT: ${{ steps.resolve_build_platforms.outputs.build_amd64_enabled }}
           BUILD_ARM64_ENABLED_INPUT: ${{ steps.resolve_build_platforms.outputs.build_arm64_enabled }}
+          MANIFEST_REQUIRED_INPUT: ${{ steps.resolve_build_platforms.outputs.manifest_required }}
         run: |
           echo "📋 Build Configuration Summary"
           echo "----------------------------"
@@ -791,6 +802,7 @@ jobs:
           echo "🌐 Platforms: ${BUILD_PLATFORMS_INPUT}"
           echo "🏗️ linux/amd64 build: ${BUILD_AMD64_ENABLED_INPUT}"
           echo "🏗️ linux/arm64 build: ${BUILD_ARM64_ENABLED_INPUT}"
+          echo "📦 Multi-arch manifest: ${MANIFEST_REQUIRED_INPUT}"
           echo "🔖 Branch: ${BRANCH_NAME_INPUT}"
           echo "🚀 Release Branch: ${RELEASE_BRANCH_INPUT} (${RELEASE_BRANCH_STATUS})"
           echo "🔄 Trigger: ${EVENT_NAME_INPUT}"
@@ -818,8 +830,14 @@ jobs:
                 "${DOCKER_HAS_CREDENTIALS_INPUT}" == "true" && \
                 "${DOCKER_HAS_CONFIG_INPUT}" == "true" ]]; then
             echo "🐳 Docker Hub Release: ✅ Will run (release branch with credentials)"
+            if [[ "${MANIFEST_REQUIRED_INPUT}" == "true" ]]; then
+              echo "📦 Docker Hub Manifest: ✅ Will run (multiple platforms requested)"
+            else
+              echo "📦 Docker Hub Manifest: ❌ Will not run (single platform requested)"
+            fi
           else
             echo "🐳 Docker Hub Release: ❌ Will not run"
+            echo "📦 Docker Hub Manifest: ❌ Will not run"
           fi
 
           # GCP Release - on release branches or manual trigger with credentials
@@ -1221,6 +1239,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
+      MANIFEST_REQUIRED: ${{ needs.config.outputs.manifest_required }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
@@ -1281,15 +1300,27 @@ jobs:
           [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
           echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
 
-      - name: Push Image
-        id: build
+      - name: Prepare tags
+        id: prepare_tags
+        env:
+          IMAGE_REF: ${{ steps.validate_image.outputs.image_ref }}
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+        run: |
+          set -euo pipefail
+          [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
+          [[ "${RELEASE_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid release_version: ${RELEASE_VERSION}"; exit 1; }
+          printf 'docker_tags=%s:%s,%s:latest\n' "${IMAGE_REF}" "${RELEASE_VERSION}" "${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Push digest for manifest
+        id: build_digest
+        if: env.MANIFEST_REQUIRED == 'true'
         uses: docker/build-push-action@v7
         with:
           context: ${{ steps.validate_build_paths.outputs.context }}
           file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
           platforms: linux/amd64
-          # Push by digest (no temp arch tags) so only final manifest tags are published.
+          # Multi-arch releases publish per-arch digests first, then tag them via imagetools.
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ steps.validate_image.outputs.image_ref }}
           sbom: true
@@ -1298,9 +1329,27 @@ jobs:
           build-args: |
             ${{ env.BUILD_ARGS }}
 
+      - name: Push tagged image
+        id: build_single_arch
+        if: env.MANIFEST_REQUIRED != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          # Native amd64 build on amd64 runner avoids QEMU/binfmt emulation.
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.prepare_tags.outputs.docker_tags }}
+          sbom: true
+          provenance: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+
       - name: Export digest
+        if: env.MANIFEST_REQUIRED == 'true'
         env:
-          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          BUILD_DIGEST: ${{ steps.build_digest.outputs.digest }}
         run: |
           set -euo pipefail
           [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
@@ -1308,6 +1357,7 @@ jobs:
           touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
       - name: Upload digest
+        if: env.MANIFEST_REQUIRED == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: digests-amd64
@@ -1340,6 +1390,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       DOCKERFILE_PATH: ${{ needs.config.outputs.dockerfile_path }}
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
+      MANIFEST_REQUIRED: ${{ needs.config.outputs.manifest_required }}
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
@@ -1400,15 +1451,27 @@ jobs:
           [[ "${DOCKER_REPO}" =~ ^[a-z0-9._/-]+$ ]] || { echo "::error::Invalid docker_repo: ${DOCKER_REPO}"; exit 1; }
           echo "image_ref=${DOCKER_ORG}/${DOCKER_REPO}" >> "$GITHUB_OUTPUT"
 
-      - name: Push Image
-        id: build
+      - name: Prepare tags
+        id: prepare_tags
+        env:
+          IMAGE_REF: ${{ steps.validate_image.outputs.image_ref }}
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+        run: |
+          set -euo pipefail
+          [[ "${IMAGE_REF}" =~ ^[a-z0-9._-]+/[a-z0-9._/-]+$ ]] || { echo "::error::Invalid Docker image reference."; exit 1; }
+          [[ "${RELEASE_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Invalid release_version: ${RELEASE_VERSION}"; exit 1; }
+          printf 'docker_tags=%s:%s,%s:latest\n' "${IMAGE_REF}" "${RELEASE_VERSION}" "${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Push digest for manifest
+        id: build_digest
+        if: env.MANIFEST_REQUIRED == 'true'
         uses: docker/build-push-action@v7
         with:
           context: ${{ steps.validate_build_paths.outputs.context }}
           file: ${{ steps.validate_build_paths.outputs.dockerfile }}
           # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
           platforms: linux/arm64
-          # Push by digest (no temp arch tags) so only final manifest tags are published.
+          # Multi-arch releases publish per-arch digests first, then tag them via imagetools.
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ steps.validate_image.outputs.image_ref }}
           sbom: true
@@ -1417,9 +1480,27 @@ jobs:
           build-args: |
             ${{ env.BUILD_ARGS }}
 
+      - name: Push tagged image
+        id: build_single_arch
+        if: env.MANIFEST_REQUIRED != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.validate_build_paths.outputs.context }}
+          file: ${{ steps.validate_build_paths.outputs.dockerfile }}
+          # Native arm64 build on arm64 runner avoids QEMU/binfmt emulation.
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.prepare_tags.outputs.docker_tags }}
+          sbom: true
+          provenance: true
+          no-cache: true
+          build-args: |
+            ${{ env.BUILD_ARGS }}
+
       - name: Export digest
+        if: env.MANIFEST_REQUIRED == 'true'
         env:
-          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          BUILD_DIGEST: ${{ steps.build_digest.outputs.digest }}
         run: |
           set -euo pipefail
           [[ "${BUILD_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "::error::Invalid build digest."; exit 1; }
@@ -1427,6 +1508,7 @@ jobs:
           touch "/tmp/digests/${BUILD_DIGEST#sha256:}"
 
       - name: Upload digest
+        if: env.MANIFEST_REQUIRED == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: digests-arm64
@@ -1447,7 +1529,7 @@ jobs:
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.is_release_branch == 'true' &&
-      (needs.config.outputs.build_amd64_enabled == 'true' || needs.config.outputs.build_arm64_enabled == 'true') &&
+      needs.config.outputs.manifest_required == 'true' &&
       (needs.config.outputs.build_amd64_enabled != 'true' || needs.build-amd64.result == 'success') &&
       (needs.config.outputs.build_arm64_enabled != 'true' || needs.build-arm64.result == 'success')
     permissions:
