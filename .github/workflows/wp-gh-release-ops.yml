@@ -159,7 +159,7 @@ jobs:
       # using version changelog as release notes
       # attach SBOM as artifact
       - name: Create and Publish Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: "Release ${{ steps.vars.outputs.version }}"
           body: "${{ steps.changelog.outputs.description }}"
