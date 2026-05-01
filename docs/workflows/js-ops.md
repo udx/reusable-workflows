@@ -2,7 +2,7 @@
 
 Reusable workflow for Next.js applications.
 
-It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets to GitHub Release, and emits `release.json` metadata for promotion workflows. It also supports reusable input-driven concurrency controls so callers can choose queue/cancel behavior without duplicating `concurrency` blocks.
+It performs one production build per commit, packages an immutable standalone bundle, runs quality/security scripts when present in `package.json`, optionally publishes assets directly to GitHub Release from the build runner, and emits `release.json` metadata for promotion workflows. It also supports reusable input-driven concurrency controls so callers can choose queue/cancel behavior without duplicating `concurrency` blocks.
 
 ## Quick Start
 
@@ -32,7 +32,7 @@ jobs:
 - Parses and validates optional build env settings from either `build_env` (inline) or `build_env_file` (repo file), then passes resolved entries to `build-and-scan`
 - Resolves branch gating (`current_branch`, `release_branch`, `is_release_branch`) for release publishing
 - Resolves concurrency behavior (`concurrency_enabled`, `concurrency_cancel_in_progress`, resolved group/cancel values) used by `build-and-scan`
-- Emits concise config summary with high-signal values (app/version/branch/release decision/checks/concurrency/artifact)
+- Emits concise config summary with high-signal values (app/version/branch/release decision/checks/concurrency/release assets)
 - Uses `package.json` version as release version/tag
 - Emits configuration summary in the job summary
 
@@ -45,26 +45,29 @@ jobs:
 - Packages `.next/standalone`, `.next/static`, and `public` into `tar.gz`
 - Produces SHA-256 checksum
 - Generates `release.json`
-- Uploads bundle + metadata artifacts
+- Publishes the bundle, checksum, and `release.json` directly to GitHub Release when running on the release branch and the release tag does not already exist
+- Skips GitHub Actions workflow artifact upload by design so large bundles do not consume Actions artifact storage quota
 - Emits build-and-scan summary with per-step status markers (`✅`, `⏭️`, `❌`) for install/lint/typecheck/test/scan/build/package
 
-### `github-release`
+### Release Publishing
 
-- Downloads release assets artifact
-- Runs only when `config` resolved `is_release_branch == true`
-- Creates/updates GitHub Release with:
-  - bundle archive
-  - checksum file
-  - `release.json`
-- Emits release summary with published tag/files
+There is no separate release job. Release publishing now happens in `build-and-scan` from files generated in that same job workspace, avoiding `actions/upload-artifact` and `actions/download-artifact`. A release branch run still skips publishing when the package version tag already exists. The bundle, checksum, and `release.json` are attached during release creation so repositories using immutable release settings do not need a post-publish asset mutation.
 
 `config` and `build-and-scan` always run. Bundle packaging and metadata generation happen regardless of whether publishing is enabled.
+
+Release callers must grant `contents: write` so the GitHub Release can be created. Verify-only callers can keep `contents: read` when `release_branch: ""` disables publishing.
+
+### Storage Quota Note
+
+GitHub Actions workflow artifacts and caches count against the user's GitHub organization Actions storage quota. This can become a hard failure for organizations with small included quotas, especially when standalone Next.js bundles are hundreds of megabytes and repeated release runs retain old copies.
+
+This workflow treats the bundle as a release asset, not a workflow artifact. The runner packages the bundle, checksum, and metadata locally, then uploads those files directly to the GitHub Release in the same job. That avoids storing duplicate copies of the same bundle in both Actions artifact storage and GitHub Releases.
 
 ## Inputs
 
 | Input               | Description                                   | Default | Required |
 | ------------------- | --------------------------------------------- | ------- | -------- |
-| `app_name`          | App name used in artifact naming and metadata. If empty, derived from `package.json` name | `""` | |
+| `app_name`          | App name used in release asset naming and metadata. If empty, derived from `package.json` name | `""` | |
 | `working_directory` | Directory containing `package.json`           | `.`     | |
 | `node_version`      | Node.js version                               | `24`    | |
 | `package_manager`   | Package manager (`npm` or `yarn`). If empty, auto-detected from `packageManager` field and lockfiles | `""` | |
@@ -94,9 +97,7 @@ Build env notes:
 | --------------------------- | --------------------------------------- |
 | `version`                   | Resolved release version                |
 | `artifact_type`             | Always `bundle`                         |
-| `bundle_artifact_name`      | Uploaded bundle artifact name           |
 | `bundle_sha256`             | SHA-256 of the bundle tarball           |
-| `release_metadata_artifact` | Artifact name containing `release.json` |
 
 ## Caller Examples
 

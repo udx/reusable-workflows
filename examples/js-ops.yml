@@ -62,7 +62,7 @@ jobs:
 
   # ===========================================================================
   # Verify Only + Concurrency Disabled: verify-no-concurrency
-  # USE CASE: Always run checks/artifacts, never publish release, no queue/cancel
+  # USE CASE: Always run checks/build/package, never publish release, no queue/cancel
   # ===========================================================================
   verify-no-concurrency:
     permissions:
