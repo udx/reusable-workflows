@@ -38,7 +38,7 @@ jobs:
       # Prepare variables
       - name: Prepare vars
         id: vars
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -84,7 +84,7 @@ jobs:
             core.setOutput('is_prerelease', is_prerelease );
         
       - name: Parse Changelog Entries
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         id: changelog
         env:
           VERSION_INPUT: ${{ steps.vars.outputs.version }}
