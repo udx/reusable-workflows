@@ -1078,10 +1078,11 @@ jobs:
 
   github-release:
     runs-on: ubuntu-24.04
-    needs: [config, build-and-scan]
+    needs: [config, control-gate, build-and-scan]
     if: |
       always() &&
-      success() &&
+      needs.control-gate.result == 'success' &&
+      needs.build-and-scan.result == 'success' &&
       needs.config.outputs.is_release_branch == 'true' &&
       needs.config.outputs.enable_github_release != 'false'
     permissions:
@@ -1220,9 +1221,10 @@ jobs:
 
   build-amd64:
     runs-on: ubuntu-24.04
-    needs: [config, github-release]
+    needs: [config, control-gate, github-release]
     if: |
       always() &&
+      needs.control-gate.result == 'success' &&
       needs.config.result == 'success' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
@@ -1371,9 +1373,10 @@ jobs:
   build-arm64:
     # TODO: If ubuntu-24.04-arm is unavailable, set ARM64_RUNNER_LABEL to a self-hosted arm64 label.
     runs-on: ${{ vars.ARM64_RUNNER_LABEL != '' && vars.ARM64_RUNNER_LABEL || 'ubuntu-24.04-arm' }}
-    needs: [config, github-release]
+    needs: [config, control-gate, github-release]
     if: |
       always() &&
+      needs.control-gate.result == 'success' &&
       needs.config.result == 'success' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
@@ -1521,9 +1524,10 @@ jobs:
 
   manifest:
     runs-on: ubuntu-24.04
-    needs: [config, github-release, build-amd64, build-arm64]
+    needs: [config, control-gate, github-release, build-amd64, build-arm64]
     if: |
       always() &&
+      needs.control-gate.result == 'success' &&
       needs.config.result == 'success' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       needs.config.outputs.docker_has_credentials == 'true' &&
@@ -1610,9 +1614,11 @@ jobs:
 
   google-cloud-release:
     runs-on: ubuntu-24.04
-    needs: [config, build-and-scan, github-release]
+    needs: [config, control-gate, build-and-scan, github-release]
     if: |
       always() &&
+      needs.control-gate.result == 'success' &&
+      needs.build-and-scan.result == 'success' &&
       needs.config.outputs.gcp_has_credentials == 'true' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
@@ -1775,9 +1781,11 @@ jobs:
 
   azure-container-registry-release:
     runs-on: ubuntu-24.04
-    needs: [config, build-and-scan, github-release]
+    needs: [config, control-gate, build-and-scan, github-release]
     if: |
       always() &&
+      needs.control-gate.result == 'success' &&
+      needs.build-and-scan.result == 'success' &&
       needs.config.outputs.acr_has_credentials == 'true' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
@@ -1948,6 +1956,7 @@ jobs:
     needs:
       [
         config,
+        control-gate,
         github-release,
         manifest,
         google-cloud-release,
@@ -1955,6 +1964,7 @@ jobs:
       ]
     if: |
       always() &&
+      needs.control-gate.result == 'success' &&
       needs.config.outputs.has_slack_webhook == 'true' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
       (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') &&
