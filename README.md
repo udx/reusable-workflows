@@ -90,6 +90,7 @@ Repository automation workflows (tests, release automation, etc.) are marked wit
 ### Local Checks
 
 - `bash tests/docker-ops-build-args.sh` validates `docker-ops` build argument placeholder handling, including branch names with `/` and `&`.
+- `dev.kit repo` refreshes generated Rabbit CI context in [`.rabbit/context.yaml`](.rabbit/context.yaml) after workflow contracts, docs, examples, or maintainer automation change.
 
 ## License
 

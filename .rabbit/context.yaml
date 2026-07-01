@@ -6,7 +6,7 @@ generator:
   tool: dev.kit
   repo: https://github.com/udx/dev.kit
   version: 0.13.0
-  generated_at: 2026-06-24T14:45:28Z
+  generated_at: 2026-07-01T13:09:17Z
   sources:
     homepage: https://udx.dev/kit
     repository: https://github.com/udx/dev.kit
@@ -41,8 +41,8 @@ refs:
 
 commands:
   verify:
-    run: npm test
-    source: docs/workflows/npm-release-ops.md
+    run: bash tests/docker-ops-build-args.sh
+    source: README.md
   build:
     run: npm run build
     source: docs/workflows/npm-release-ops.md
@@ -67,10 +67,11 @@ gaps:
       - env vars documented in docs/workflows/js-ops.md
   - factor: pipeline
     status: partial
-    message: Found partial pipeline signals in .github/workflows/npm-release-ops.yml, but the repo does not declare a complete validation/deploy contract yet.
+    message: Found partial pipeline signals in .github/workflows/npm-release-ops.yml, tests, but the repo does not declare a complete validation/deploy contract yet.
     repair_target: .github/workflows/ or canonical verify command
-    reference: docs/workflows/npm-release-ops.md
+    reference: README.md
     evidence:
+      - tests
       - .github/workflows/*.yml
 
 # Manifests — YAML files that define repo-specific workflow, deploy, or contract behavior.
