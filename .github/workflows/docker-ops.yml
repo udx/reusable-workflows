@@ -650,6 +650,7 @@ jobs:
           if [ -n "${BUILD_ARGS_INPUT}" ]; then
             # Convert comma-separated args to newline-separated for build-args format
             BUILD_ARGS_TEMP=$(printf '%s' "${BUILD_ARGS_INPUT}" | tr ',' '\n')
+            BUILD_ARGS_DELIMITER="BUILD_ARGS_EOF_${GITHUB_RUN_ID:-run}_${RANDOM}_${RANDOM}"
             
             # Process placeholders
             echo "🔄 Processing placeholders in build arguments..."
@@ -666,12 +667,12 @@ jobs:
             
             # Store in output
             {
-              printf 'build_args<<EOF\n'
+              printf 'build_args<<%s\n' "${BUILD_ARGS_DELIMITER}"
               printf '%s\n' "${BUILD_ARGS_LINES[@]}"
-              printf 'EOF\n'
+              printf '%s\n' "${BUILD_ARGS_DELIMITER}"
             } >> "$GITHUB_OUTPUT"
             
-            echo "✅ Build arguments processed with placeholders: ${BUILD_ARGS_INPUT}"
+            echo "✅ Build arguments processed with placeholders (${#BUILD_ARGS_LINES[@]} item(s))"
           else
             # No build args provided
             echo "build_args=" >> $GITHUB_OUTPUT

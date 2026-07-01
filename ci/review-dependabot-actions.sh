@@ -32,19 +32,33 @@ run_gh() {
   fi
 }
 
+markdown_table_cell() {
+  local value="$1"
+  value="${value//$'\r'/ }"
+  value="${value//$'\n'/ }"
+  value="${value//$'\t'/ }"
+  value="${value//|/\\|}"
+  printf '%s' "${value}"
+}
+
 append_decision() {
   local number="$1"
   local classification="$2"
   local reason="$3"
   local action_taken="$4"
   local url="$5"
+  local classification_cell action_taken_cell reason_cell
+
+  classification_cell="$(markdown_table_cell "${classification}")"
+  action_taken_cell="$(markdown_table_cell "${action_taken}")"
+  reason_cell="$(markdown_table_cell "${reason}")"
 
   printf '| [#%s](%s) | %s | %s | %s |\n' \
     "${number}" \
     "${url}" \
-    "${classification}" \
-    "${action_taken}" \
-    "${reason}" >> "${work_dir}/decisions.md"
+    "${classification_cell}" \
+    "${action_taken_cell}" \
+    "${reason_cell}" >> "${work_dir}/decisions.md"
 }
 
 normalized_numeric_version() {
@@ -122,11 +136,11 @@ write_comment() {
   local existing_id
 
   {
-    echo "<!-- udx-dependabot-actions-review -->"
-    echo
-    echo "${body}"
-    echo
-    echo "_Classification: ${classification}._"
+    printf '<!-- udx-dependabot-actions-review -->\n'
+    printf '\n'
+    printf '%s\n' "${body}"
+    printf '\n'
+    printf '_Classification: %s._\n' "${classification}"
   } > "${comment_path}"
 
   existing_id="$(existing_comment_id "${details_path}")"
