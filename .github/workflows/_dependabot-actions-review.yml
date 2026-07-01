@@ -1,0 +1,197 @@
+---
+name: _udx-automation / github actions dependency review
+
+"on":
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Optional Dependabot PR number to review"
+        required: false
+        type: string
+      dry_run:
+        description: "Print decisions without commenting or merging"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+env:
+  HUMAN_REVIEWER: fqjony
+  MERGE_METHOD: squash
+  HAS_COPILOT_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN != '' }}
+  COPILOT_HINTS_PATH: copilot-dependabot-risk-hints.json
+  COPILOT_HINTS_REQUIRED: "false"
+  PR_INVENTORY_PATH: dependabot-action-prs.json
+  REPORT_PATH: dependabot-actions-review-report.md
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.DEPENDABOT_REVIEWER_TOKEN || github.token }}
+
+      - name: Find Dependabot GitHub Actions PRs
+        id: inventory
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_REVIEWER_TOKEN || github.token }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          PR_INVENTORY_PATH: ${{ env.PR_INVENTORY_PATH }}
+        run: |
+          set -euo pipefail
+
+          dependabot_filter='
+            .state == "OPEN" and
+            .isDraft == false and
+            (.author.login == "app/dependabot" or .author.login == "dependabot[bot]") and
+            (.headRefName | startswith("dependabot/github_actions/"))
+          '
+
+          if [ -n "${PR_NUMBER:-}" ]; then
+            gh pr view "${PR_NUMBER}" \
+              --json number,title,url,headRefName,author,state,isDraft,baseRefName,labels \
+              > raw-pr.json
+            jq "[.] | map(select(${dependabot_filter}))" raw-pr.json > "${PR_INVENTORY_PATH}"
+          else
+            gh pr list \
+              --state open \
+              --json number,title,url,headRefName,author,state,isDraft,baseRefName,labels \
+              --limit 100 > raw-prs.json
+            jq "[.[] | select(${dependabot_filter})]" raw-prs.json > "${PR_INVENTORY_PATH}"
+          fi
+
+          pr_count="$(jq 'length' "${PR_INVENTORY_PATH}")"
+          echo "pr_count=${pr_count}" >> "${GITHUB_OUTPUT}"
+          echo "Inventory: found ${pr_count} non-draft Dependabot GitHub Actions PR(s)."
+          jq -r '.[] | "- #\(.number) \(.title)"' "${PR_INVENTORY_PATH}" || true
+
+      - name: Stop when there is nothing to review
+        if: steps.inventory.outputs.pr_count == '0'
+        run: echo "No non-draft Dependabot GitHub Actions PRs found."
+
+      - name: Set up Node.js
+        if: steps.inventory.outputs.pr_count != '0' && env.HAS_COPILOT_TOKEN == 'true'
+        uses: actions/setup-node@v6
+        timeout-minutes: 3
+        with:
+          node-version: "24"
+          token: ${{ secrets.DEPENDABOT_REVIEWER_TOKEN || github.token }}
+
+      - name: Install Copilot CLI
+        if: steps.inventory.outputs.pr_count != '0' && env.HAS_COPILOT_TOKEN == 'true'
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          npm install -g @github/copilot
+          echo "Review setup: installed Copilot CLI $(copilot --version 2>/dev/null || true)"
+
+      - name: Ask Copilot for risk hints
+        if: steps.inventory.outputs.pr_count != '0' && env.HAS_COPILOT_TOKEN == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_REVIEWER_TOKEN || github.token }}
+          COPILOT_HINTS_PATH: ${{ env.COPILOT_HINTS_PATH }}
+          PR_INVENTORY_PATH: ${{ env.PR_INVENTORY_PATH }}
+        run: |
+          set -euo pipefail
+          bash ci/copilot-dependabot-risk-hints.sh
+
+      - name: Review Dependabot PRs
+        if: steps.inventory.outputs.pr_count != '0'
+        timeout-minutes: 5
+        env:
+          COPILOT_HINTS_PATH: ${{ env.COPILOT_HINTS_PATH }}
+          COPILOT_HINTS_REQUIRED: ${{ env.COPILOT_HINTS_REQUIRED }}
+          AUTOMATION_GITHUB_TOKEN: ${{ secrets.DEPENDABOT_REVIEWER_TOKEN || github.token }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_REVIEWER_TOKEN || github.token }}
+          HUMAN_REVIEWER: ${{ env.HUMAN_REVIEWER }}
+          MERGE_METHOD: ${{ env.MERGE_METHOD }}
+          PR_INVENTORY_PATH: ${{ env.PR_INVENTORY_PATH }}
+          REPORT_PATH: ${{ env.REPORT_PATH }}
+        run: |
+          set -euo pipefail
+          bash ci/review-dependabot-actions.sh
+
+      - name: Guard review-only changes
+        if: steps.inventory.outputs.pr_count != '0'
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+
+          unexpected_changes="$(
+            git status --porcelain --untracked-files=all | while IFS= read -r line; do
+              status="${line:0:2}"
+              path="${line:3}"
+
+              if [ "${status}" = "??" ]; then
+                case "${path}" in
+                  dependabot-action-prs.json|raw-pr.json|raw-prs.json|copilot-dependabot-risk-hints.json|dependabot-actions-review-report.md|.tmp/dependabot-actions-review/*)
+                    continue
+                    ;;
+                esac
+              fi
+
+              printf '%s\n' "${line}"
+            done
+          )"
+          if [ -n "${unexpected_changes}" ]; then
+            echo "Review guard: unexpected workspace changes:" >&2
+            printf '%s\n' "${unexpected_changes}" >&2
+            exit 1
+          fi
+
+          echo "Review guard: workspace has only expected review artifacts"
+
+      - name: Upload review report
+        if: steps.inventory.outputs.pr_count != '0'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 3
+        with:
+          name: dependabot-actions-review-report
+          path: |
+            dependabot-actions-review-report.md
+            copilot-dependabot-risk-hints.json
+          if-no-files-found: ignore
+
+      - name: Write workflow summary
+        if: always()
+        env:
+          PR_COUNT: ${{ steps.inventory.outputs.pr_count }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          REPORT_PATH: ${{ env.REPORT_PATH }}
+        run: |
+          {
+            echo "## _udx-automation / github actions dependency review"
+            echo
+            echo "- Dependabot GitHub Actions PRs: \`${PR_COUNT:-0}\`"
+            echo "- Dry run: \`${DRY_RUN}\`"
+            echo "- Automation identity: \`${{ secrets.DEPENDABOT_REVIEWER_TOKEN && 'DEPENDABOT_REVIEWER_TOKEN' || 'GITHUB_TOKEN fallback' }}\`"
+            if [ -f "${REPORT_PATH}" ]; then
+              echo
+              cat "${REPORT_PATH}"
+            else
+              echo
+              echo "No review report was produced."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "Summary: wrote GitHub Actions step summary."

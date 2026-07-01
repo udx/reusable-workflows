@@ -25,6 +25,7 @@ Detailed documentation for each reusable workflow, including input/secret tables
 ## For Maintainers
 
 - **Engineering Standards**: [`docs/STANDARDS.md`](STANDARDS.md) (Design principles and release automation policy)
+- **Dependency Maintenance**: [`docs/dependency-maintenance.md`](dependency-maintenance.md) (Dependabot Actions review and automation policy)
 - **Release Workflow**: [`.github/workflows/_release.yml`](../.github/workflows/_release.yml)
 - **Version Strategy**: [`ci/git-version.yml`](../ci/git-version.yml)
 
