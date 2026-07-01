@@ -35,25 +35,26 @@ assert_branch_placeholders() {
 
   output_file=$(mktemp)
   expected_file=$(mktemp)
-  trap 'rm -f "$output_file" "$expected_file"' RETURN
-  BUILD_ARGS_OUTPUT_DELIMITER=TEST_BUILD_ARGS_EOF
+  (
+    trap 'rm -f "$output_file" "$expected_file"' EXIT
+    BUILD_ARGS_OUTPUT_DELIMITER=TEST_BUILD_ARGS_EOF
 
-  parse_build_args \
-    'VERSION={{version}},BRANCH={{branch}},MIX={{branch}}-{{version}}' \
-    '1.2.3' \
-    "$branch_name" \
-    "$output_file"
+    parse_build_args \
+      'VERSION={{version}},BRANCH={{branch}},MIX={{branch}}-{{version}}' \
+      '1.2.3' \
+      "$branch_name" \
+      "$output_file"
 
-  {
-    printf 'build_args<<TEST_BUILD_ARGS_EOF\n'
-    printf 'VERSION=1.2.3\n'
-    printf 'BRANCH=%s\n' "$branch_name"
-    printf 'MIX=%s-1.2.3\n' "$branch_name"
-    printf 'TEST_BUILD_ARGS_EOF\n'
-  } > "$expected_file"
+    {
+      printf 'build_args<<TEST_BUILD_ARGS_EOF\n'
+      printf 'VERSION=1.2.3\n'
+      printf 'BRANCH=%s\n' "$branch_name"
+      printf 'MIX=%s-1.2.3\n' "$branch_name"
+      printf 'TEST_BUILD_ARGS_EOF\n'
+    } > "$expected_file"
 
-  diff -u "$expected_file" "$output_file"
-  unset BUILD_ARGS_OUTPUT_DELIMITER
+    diff -u "$expected_file" "$output_file"
+  )
 }
 
 assert_fixed_eof_is_literal_value() {
@@ -62,24 +63,25 @@ assert_fixed_eof_is_literal_value() {
 
   output_file=$(mktemp)
   expected_file=$(mktemp)
-  trap 'rm -f "$output_file" "$expected_file"' RETURN
-  BUILD_ARGS_OUTPUT_DELIMITER=TEST_BUILD_ARGS_EOF
+  (
+    trap 'rm -f "$output_file" "$expected_file"' EXIT
+    BUILD_ARGS_OUTPUT_DELIMITER=TEST_BUILD_ARGS_EOF
 
-  parse_build_args \
-    'EOF,BRANCH={{branch}}' \
-    '1.2.3' \
-    'fix/foo' \
-    "$output_file"
+    parse_build_args \
+      'EOF,BRANCH={{branch}}' \
+      '1.2.3' \
+      'fix/foo' \
+      "$output_file"
 
-  {
-    printf 'build_args<<TEST_BUILD_ARGS_EOF\n'
-    printf 'EOF\n'
-    printf 'BRANCH=fix/foo\n'
-    printf 'TEST_BUILD_ARGS_EOF\n'
-  } > "$expected_file"
+    {
+      printf 'build_args<<TEST_BUILD_ARGS_EOF\n'
+      printf 'EOF\n'
+      printf 'BRANCH=fix/foo\n'
+      printf 'TEST_BUILD_ARGS_EOF\n'
+    } > "$expected_file"
 
-  diff -u "$expected_file" "$output_file"
-  unset BUILD_ARGS_OUTPUT_DELIMITER
+    diff -u "$expected_file" "$output_file"
+  )
 }
 
 assert_branch_placeholders 'fix/foo'
