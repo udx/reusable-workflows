@@ -73,8 +73,11 @@ service account. The token must have repository access to this repo with
 `Contents`, `Issues`, `Pull requests`, and `Workflows` read/write permissions;
 `Issues` is required for PR comments, and `Workflows` is required when a safe
 Dependabot PR updates files under `.github/workflows/` and the automation needs
-to merge or enable auto-merge. The workflow falls back to `GITHUB_TOKEN` only
-when the service-account token is missing. If `COPILOT_GITHUB_TOKEN` is set, the
+to merge or enable auto-merge. The workflow grants the fallback `GITHUB_TOKEN`
+the valid repository-scoped workflow permissions available in Actions YAML, but
+the service-account token is still the documented path for workflow-file update
+merges. The workflow falls back to `GITHUB_TOKEN` only when the service-account
+token is missing. If `COPILOT_GITHUB_TOKEN` is set, the
 workflow also runs Copilot CLI for a bounded risk-hint scan over Dependabot
 metadata. Copilot hints are advisory by default in this repository: advanced
 risks can escalate a PR, but a missing Copilot token does not block deterministic

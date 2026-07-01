@@ -76,7 +76,7 @@ normalized_numeric_version() {
 version_part() {
   local version="$1"
   local part="$2"
-  local cleaned
+  local cleaned major minor patch
   cleaned="$(normalized_numeric_version "${version}")" || return 1
   IFS='.' read -r major minor patch _ <<< "${cleaned}"
   case "${part}" in
