@@ -87,6 +87,10 @@ Repository automation workflows (tests, release automation, etc.) are marked wit
 - [`ci/git-version.yml`](ci/git-version.yml)
 - Details: [`docs/release-automation.md`](docs/release-automation.md)
 
+### Local Checks
+
+- `bash tests/docker-ops-build-args.sh` validates `docker-ops` build argument placeholder handling, including branch names with `/` and `&`.
+
 ## License
 
 MIT License - see [LICENSE](https://github.com/udx/reusable-workflows/blob/master/LICENSE)
