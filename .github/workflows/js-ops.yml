@@ -43,6 +43,11 @@ on:
         required: false
         default: "latest"
         type: string
+      run_lint:
+        description: "Run the package.json lint script when present. Disable for apps whose release pipeline should not gate on lint (e.g. Vercel-migrated apps that never linted at deploy time)."
+        required: false
+        default: true
+        type: boolean
       concurrency_enabled:
         description: "Enable build-and-scan job concurrency control."
         required: false
@@ -587,7 +592,7 @@ jobs:
 
       - name: Run lint
         id: lint
-        if: ${{ needs.config.outputs.has_lint == 'true' }}
+        if: ${{ needs.config.outputs.has_lint == 'true' && inputs.run_lint }}
         working-directory: ${{ needs.config.outputs.working_directory }}
         run: |
           set -euo pipefail
