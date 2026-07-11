@@ -2,7 +2,7 @@
 name: JS App Release Ops
 
 # Reusable workflow for immutable Next.js standalone bundle releases.
-# Supports npm/yarn, runs quality/security scripts when present in package.json,
+# Supports npm/yarn/pnpm, runs quality/security scripts when present in package.json,
 # optionally publishes local release assets to GitHub, and emits release metadata.
 
 on:
@@ -24,9 +24,14 @@ on:
         default: "24"
         type: string
       package_manager:
-        description: "Package manager to use: npm or yarn. If empty, workflow auto-detects."
+        description: "Package manager to use: npm, yarn, or pnpm. If empty, workflow auto-detects."
         required: false
         default: ""
+        type: string
+      pnpm_version:
+        description: "pnpm version spec for pnpm/action-setup (only used when package manager is pnpm). Set empty to defer to the repo's packageManager field."
+        required: false
+        default: "10"
         type: string
       build_env:
         description: "Optional newline-delimited KEY=VALUE entries applied to build step."
@@ -353,11 +358,12 @@ jobs:
           const pkgPm = (pkg.packageManager || '').trim();
           const hasYarnLock = fs.existsSync('yarn.lock');
           const hasNpmLock = fs.existsSync('package-lock.json') || fs.existsSync('npm-shrinkwrap.json');
+          const hasPnpmLock = fs.existsSync('pnpm-lock.yaml');
           let packageManager = 'npm';
 
           if (inputPm) {
-            if (inputPm !== 'npm' && inputPm !== 'yarn') {
-              console.error('package_manager must be one of: npm, yarn');
+            if (inputPm !== 'npm' && inputPm !== 'yarn' && inputPm !== 'pnpm') {
+              console.error('package_manager must be one of: npm, yarn, pnpm');
               process.exit(1);
             }
             packageManager = inputPm;
@@ -365,6 +371,10 @@ jobs:
             packageManager = 'yarn';
           } else if (pkgPm.startsWith('npm@')) {
             packageManager = 'npm';
+          } else if (pkgPm.startsWith('pnpm@')) {
+            packageManager = 'pnpm';
+          } else if (hasPnpmLock && !hasYarnLock && !hasNpmLock) {
+            packageManager = 'pnpm';
           } else if (hasYarnLock && !hasNpmLock) {
             packageManager = 'yarn';
           }
@@ -428,6 +438,17 @@ jobs:
             typecheck_cmd="npm run typecheck"
             test_cmd="npm run test"
             scan_cmd="npm run scan"
+          elif [[ "${PM}" == "pnpm" ]]; then
+            if [[ -f "${WD}/pnpm-lock.yaml" ]]; then
+              install_cmd="pnpm install --frozen-lockfile"
+            else
+              install_cmd="pnpm install"
+            fi
+            build_cmd="pnpm run build"
+            lint_cmd="pnpm run lint"
+            typecheck_cmd="pnpm run typecheck"
+            test_cmd="pnpm run test"
+            scan_cmd="pnpm run scan"
           else
             if [[ -f "${WD}/yarn.lock" ]]; then
               install_cmd="corepack enable && (yarn install --immutable || yarn install --frozen-lockfile || yarn install)"
@@ -573,6 +594,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Setup pnpm
+        if: ${{ needs.config.outputs.package_manager == 'pnpm' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm_version }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -582,6 +609,7 @@ jobs:
             ${{ needs.config.outputs.working_directory }}/package-lock.json
             ${{ needs.config.outputs.working_directory }}/npm-shrinkwrap.json
             ${{ needs.config.outputs.working_directory }}/yarn.lock
+            ${{ needs.config.outputs.working_directory }}/pnpm-lock.yaml
 
       - name: Install dependencies
         id: install
