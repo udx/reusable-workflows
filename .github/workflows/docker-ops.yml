@@ -634,6 +634,7 @@ jobs:
 
       - name: Parse build arguments
         id: parse_build_args
+        shell: bash
         env:
           BUILD_ARGS_INPUT: ${{ inputs.build_args }}
           RELEASE_VERSION_INPUT: ${{ steps.set_version.outputs.version }}
@@ -643,31 +644,35 @@ jobs:
           # Get build args from inputs
           RELEASE_VERSION="${RELEASE_VERSION_INPUT}"
           BRANCH_NAME="${BRANCH_NAME_INPUT}"
+          shopt -u patsub_replacement 2>/dev/null || true
 
           # Process user-provided build args
           if [ -n "${BUILD_ARGS_INPUT}" ]; then
             # Convert comma-separated args to newline-separated for build-args format
-            BUILD_ARGS_TEMP=$(echo "${BUILD_ARGS_INPUT}" | tr ',' '\n')
+            BUILD_ARGS_TEMP=$(printf '%s' "${BUILD_ARGS_INPUT}" | tr ',' '\n')
+            BUILD_ARGS_DELIMITER="BUILD_ARGS_EOF_${GITHUB_RUN_ID:-run}_${RANDOM}_${RANDOM}"
             
             # Process placeholders
             echo "🔄 Processing placeholders in build arguments..."
-            BUILD_ARGS=""
+            BUILD_ARGS_LINES=()
             while IFS= read -r line; do
               # Replace {{version}} with actual version
-              line=$(echo "$line" | sed "s/{{version}}/$RELEASE_VERSION/g")
+              line=${line//\{\{version\}\}/$RELEASE_VERSION}
               # Replace {{branch}} with branch name
-              line=$(echo "$line" | sed "s/{{branch}}/$BRANCH_NAME/g")
+              line=${line//\{\{branch\}\}/$BRANCH_NAME}
               # Add more placeholder replacements as needed
               
-              BUILD_ARGS="${BUILD_ARGS}${line}\n"
+              BUILD_ARGS_LINES+=("$line")
             done <<< "$BUILD_ARGS_TEMP"
             
             # Store in output
-            echo "build_args<<EOF" >> $GITHUB_OUTPUT
-            echo -e "$BUILD_ARGS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              printf 'build_args<<%s\n' "${BUILD_ARGS_DELIMITER}"
+              printf '%s\n' "${BUILD_ARGS_LINES[@]}"
+              printf '%s\n' "${BUILD_ARGS_DELIMITER}"
+            } >> "$GITHUB_OUTPUT"
             
-            echo "✅ Build arguments processed with placeholders: ${BUILD_ARGS_INPUT}"
+            echo "✅ Build arguments processed with placeholders (${#BUILD_ARGS_LINES[@]} item(s))"
           else
             # No build args provided
             echo "build_args=" >> $GITHUB_OUTPUT

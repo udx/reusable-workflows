@@ -138,6 +138,8 @@ This matrix maps each registry type to required caller configuration:
 - `{{version}}` → Release version
 - `{{branch}}` → Current branch
 
+Placeholders are replaced literally, so ordinary Git branch names such as `fix/foo`, `dependabot/npm_and_yarn/lib/firebase/axios-1.16.0`, and `release/foo&bar` are safe to pass through `{{branch}}`.
+
 Example: `build_args: "VERSION={{version}},ENV=production"`
 
 ### Subdirectory Repositories

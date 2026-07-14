@@ -87,6 +87,15 @@ Repository automation workflows (tests, release automation, etc.) are marked wit
 - [`ci/git-version.yml`](ci/git-version.yml)
 - Details: [`docs/release-automation.md`](docs/release-automation.md)
 
+### Rabbit CI Integration
+
+Rabbit CI and agent workflows use repo-owned context from [`.rabbit/`](.rabbit/readme.md). Refresh it with `dev.kit repo` after changing workflow contracts, docs, examples, or maintainer automation.
+
+### Local Checks
+
+- `bash tests/docker-ops-build-args.sh` validates `docker-ops` build argument placeholder handling, including branch names with `/` and `&`.
+- `dev.kit repo` refreshes generated repo context for Rabbit CI.
+
 ## License
 
 MIT License - see [LICENSE](https://github.com/udx/reusable-workflows/blob/master/LICENSE)
