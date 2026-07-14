@@ -244,7 +244,7 @@ jobs:
           echo "📋 Working directory: ${INPUT_WORKING_DIRECTORY}"
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -927,7 +927,7 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -1094,7 +1094,7 @@ jobs:
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1245,7 +1245,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1397,7 +1397,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1644,7 +1644,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1811,7 +1811,7 @@ jobs:
       BUILD_ARGS: ${{ needs.config.outputs.build_args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
