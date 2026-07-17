@@ -89,7 +89,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.inventory.outputs.pr_count != '0' && env.HAS_COPILOT_TOKEN == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         timeout-minutes: 3
         with:
           node-version: "24"
