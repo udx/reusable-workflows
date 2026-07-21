@@ -70,6 +70,9 @@ Task:
   authentication or permission changes, changed action inputs/defaults, side
   effects, unclear release notes, or tenant/runtime validation needs that are
   relevant to the changed workflows.
+- A generic "breaking" heading or release-note label is not enough on its own.
+  Identify the affected behavior and confirm that the changed workflow uses it
+  before requesting advanced review.
 - Mark "none" when the metadata does not show those concerns, or when an
   upstream concern is generic and the affected workflows do not use the relevant
   trigger, input, authentication mode, runner, or runtime behavior.

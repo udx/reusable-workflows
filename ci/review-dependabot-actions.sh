@@ -118,6 +118,20 @@ copilot_hint_reason() {
   ' "${copilot_hints_path}" 2>/dev/null | head -n 1 || true
 }
 
+copilot_no_risk_reason() {
+  local number="$1"
+
+  if [ -z "${copilot_hints_path}" ] || [ ! -f "${copilot_hints_path}" ]; then
+    return 0
+  fi
+
+  jq -r --argjson number "${number}" '
+    .hints[]?
+    | select(.number == $number and .risk == "none")
+    | .reason
+  ' "${copilot_hints_path}" 2>/dev/null | head -n 1 || true
+}
+
 copilot_hints_status() {
   if [ -z "${copilot_hints_path}" ] || [ ! -f "${copilot_hints_path}" ]; then
     echo "missing"
@@ -278,8 +292,13 @@ classify_pr() {
     return
   fi
 
-  if printf '%s' "${lower_body}" | grep -Eq '(^|[^[:alnum:]_])breaking([^[:alnum:]_]|$)|migration|removed input|removed option|removed parameter|renamed input|renamed option|renamed parameter|changed authentication|requires authentication|authentication requirement|changed credential|requires credential|credential requirement|changed default'; then
-    echo "needs migration|Release notes mention breaking, migration, authentication, credential, input, option, parameter, or default-behavior changes"
+  if printf '%s' "${lower_body}" | grep -Eq 'migration|removed input|removed option|removed parameter|renamed input|renamed option|renamed parameter|changed authentication|requires authentication|authentication requirement|changed credential|requires credential|credential requirement|changed default'; then
+    echo "needs migration|Release notes mention a migration, authentication, credential, input, option, parameter, or default-behavior change"
+    return
+  fi
+
+  if printf '%s' "${lower_body}" | grep -Eq '(^|[^[:alnum:]_])breaking([^[:alnum:]_]|$)'; then
+    echo "needs expert decision|Release notes mention a breaking change; inspect whether it applies to the changed workflows"
     return
   fi
 
@@ -325,6 +344,7 @@ for row in $(jq -r '.[].number' "${inventory_path}"); do
   classification="${result%%|*}"
   reason="${result#*|}"
   hint_reason="$(copilot_hint_reason "${number}")"
+  no_risk_reason="$(copilot_no_risk_reason "${number}")"
 
   if [ "${classification}" = "safe" ] && [ -n "${hint_reason}" ]; then
     classification="needs expert decision"
@@ -332,6 +352,12 @@ for row in $(jq -r '.[].number' "${inventory_path}"); do
   elif [ "${classification}" = "safe" ] && [ "${copilot_hints_required}" = "true" ] && [ "${copilot_status}" != "ok" ]; then
     classification="needs expert decision"
     reason="Copilot risk scan status is ${copilot_status}; expert review required before merge"
+  elif [ "${classification}" = "needs expert decision" ] && \
+       [ "${reason}" = "Release notes mention a breaking change; inspect whether it applies to the changed workflows" ] && \
+       [ "${copilot_status}" = "ok" ] && \
+       [ -n "${no_risk_reason}" ]; then
+    classification="safe"
+    reason="Copilot verified that the generic breaking change does not apply: ${no_risk_reason}"
   elif [ -n "${hint_reason}" ]; then
     echo "#${number}: Copilot risk hint: ${hint_reason}" >> "${work_dir}/notes.md"
   fi
@@ -359,7 +385,7 @@ for row in $(jq -r '.[].number' "${inventory_path}"); do
       if [ -n "${human_reviewer}" ]; then
         mention=" @${human_reviewer}"
       fi
-      comment="Needs migration before merge. ${reason}${mention}"
+      comment="Migration review requested before merge. ${reason}${mention}"
       request_human_review "${number}"
       write_comment "${number}" "needs migration" "${comment}" "${details_path}"
       if comment_already_exists "${details_path}"; then
