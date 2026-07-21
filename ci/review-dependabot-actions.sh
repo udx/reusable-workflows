@@ -104,32 +104,34 @@ existing_comment_id() {
   ' "${details_path}" | head -n 1
 }
 
-copilot_hint_reason() {
+copilot_reason_for_risk() {
   local number="$1"
+  local risk="$2"
 
   if [ -z "${copilot_hints_path}" ] || [ ! -f "${copilot_hints_path}" ]; then
     return 0
   fi
 
-  jq -r --argjson number "${number}" '
+  jq -r --argjson number "${number}" --arg risk "${risk}" '
     .hints[]?
-    | select(.number == $number and .risk == "advanced_review")
-    | .reason
+    | select(.number == $number and .risk == $risk)
+    | (.reason? // "")
+    | if type == "string" then
+        gsub("[\\r\\n]+"; " ")
+        | gsub("^[[:space:]]+"; "")
+        | gsub("[[:space:]]+$"; "")
+      else
+        ""
+      end
   ' "${copilot_hints_path}" 2>/dev/null | head -n 1 || true
 }
 
+copilot_hint_reason() {
+  copilot_reason_for_risk "$1" "advanced_review"
+}
+
 copilot_no_risk_reason() {
-  local number="$1"
-
-  if [ -z "${copilot_hints_path}" ] || [ ! -f "${copilot_hints_path}" ]; then
-    return 0
-  fi
-
-  jq -r --argjson number "${number}" '
-    .hints[]?
-    | select(.number == $number and .risk == "none")
-    | .reason
-  ' "${copilot_hints_path}" 2>/dev/null | head -n 1 || true
+  copilot_reason_for_risk "$1" "none"
 }
 
 copilot_hints_status() {
@@ -265,7 +267,7 @@ classify_pr() {
   title_for_parse="${title_for_parse#chore(deps):}"
 
   if ! [[ "${title_for_parse}" =~ ^[Bb]ump[[:space:]]+(.+)[[:space:]]+from[[:space:]]+([^[:space:]]+)[[:space:]]+to[[:space:]]+([^[:space:]]+) ]]; then
-    echo "needs expert decision|Could not parse Dependabot title format"
+    echo "needs expert decision|standard|Could not parse Dependabot title format"
     return
   fi
 
@@ -274,12 +276,12 @@ classify_pr() {
   new_version="${BASH_REMATCH[3]}"
 
   if [ -z "${changed_files}" ]; then
-    echo "skipped|No changed files were reported by GitHub"
+    echo "skipped|standard|No changed files were reported by GitHub"
     return
   fi
 
   if ! old_major="$(version_part "${old_version}" major)" || ! new_major="$(version_part "${new_version}" major)"; then
-    echo "needs expert decision|Unclear version format ${old_version} -> ${new_version}"
+    echo "needs expert decision|standard|Unclear version format ${old_version} -> ${new_version}"
     return
   fi
 
@@ -288,41 +290,41 @@ classify_pr() {
   lower_body="$(printf '%s' "${body}" | tr '[:upper:]' '[:lower:]')"
 
   if ! is_integer "${old_major}" || ! is_integer "${new_major}"; then
-    echo "needs expert decision|Could not compare versions ${old_version} -> ${new_version}"
+    echo "needs expert decision|standard|Could not compare versions ${old_version} -> ${new_version}"
     return
   fi
 
   if printf '%s' "${lower_body}" | grep -Eq 'migration|removed input|removed option|removed parameter|renamed input|renamed option|renamed parameter|changed authentication|requires authentication|authentication requirement|changed credential|requires credential|credential requirement|changed default'; then
-    echo "needs migration|Release notes mention a migration, authentication, credential, input, option, parameter, or default-behavior change"
+    echo "needs migration|standard|Release notes mention a migration, authentication, credential, input, option, parameter, or default-behavior change"
     return
   fi
 
   if printf '%s' "${lower_body}" | grep -Eq '(^|[^[:alnum:]_])breaking([^[:alnum:]_]|$)'; then
-    echo "needs expert decision|Release notes mention a breaking change; inspect whether it applies to the changed workflows"
+    echo "needs expert decision|generic-breaking|Release notes mention a breaking change; inspect whether it applies to the changed workflows"
     return
   fi
 
   if printf '%s' "${lower_body}" | grep -Eq 'requires node ?2[0-9]|node ?2[0-9] (is |now )?required|node2[0-9]|requires node24|changed runtime|runtime requirement|runner compatibility|runner requirement'; then
-    echo "needs expert decision|Release notes mention runtime or runner compatibility risk"
+    echo "needs expert decision|standard|Release notes mention runtime or runner compatibility risk"
     return
   fi
 
   if ! is_integer "${old_minor}" || ! is_integer "${new_minor}"; then
-    echo "needs expert decision|Could not compare minor versions ${old_version} -> ${new_version}"
+    echo "needs expert decision|standard|Could not compare minor versions ${old_version} -> ${new_version}"
     return
   fi
 
   if (( new_major > old_major )); then
-    echo "safe|Major bump ${action_name} ${old_version} -> ${new_version}; no deterministic risk terms found in Dependabot release notes"
+    echo "safe|standard|Major bump ${action_name} ${old_version} -> ${new_version}; no deterministic risk terms found in Dependabot release notes"
     return
   fi
 
   if (( new_minor > old_minor )); then
-    echo "safe|Minor bump ${action_name} ${old_version} -> ${new_version}; no risk terms found in Dependabot release notes"
+    echo "safe|standard|Minor bump ${action_name} ${old_version} -> ${new_version}; no risk terms found in Dependabot release notes"
     return
   fi
 
-  echo "safe|Patch bump ${action_name} ${old_version} -> ${new_version}; no risk terms found in Dependabot release notes"
+  echo "safe|standard|Patch bump ${action_name} ${old_version} -> ${new_version}; no risk terms found in Dependabot release notes"
 }
 
 pr_count="$(jq 'length' "${inventory_path}")"
@@ -342,6 +344,8 @@ for row in $(jq -r '.[].number' "${inventory_path}"); do
   changed_files="$(jq -r '[.files[].path] | join(", ")' "${details_path}")"
   result="$(classify_pr "${title}" "${body}" "${changed_files}")"
   classification="${result%%|*}"
+  result="${result#*|}"
+  classification_code="${result%%|*}"
   reason="${result#*|}"
   hint_reason="$(copilot_hint_reason "${number}")"
   no_risk_reason="$(copilot_no_risk_reason "${number}")"
@@ -353,7 +357,7 @@ for row in $(jq -r '.[].number' "${inventory_path}"); do
     classification="needs expert decision"
     reason="Copilot risk scan status is ${copilot_status}; expert review required before merge"
   elif [ "${classification}" = "needs expert decision" ] && \
-       [ "${reason}" = "Release notes mention a breaking change; inspect whether it applies to the changed workflows" ] && \
+       [ "${classification_code}" = "generic-breaking" ] && \
        [ "${copilot_status}" = "ok" ] && \
        [ -n "${no_risk_reason}" ]; then
     classification="safe"
