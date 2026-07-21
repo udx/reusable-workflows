@@ -41,8 +41,8 @@ Copilot risk hints do not flag advanced review.
 Documented runtime changes and unclear credential or runner requirements need
 expert review. Treat a generic upstream “breaking” heading as a triage signal,
 not proof that this repository needs a migration: identify the affected behavior
-and confirm that a changed workflow uses it before classifying the PR as `needs
-migration`. When the Copilot risk scan explicitly finds that a generic breaking
+and confirm that a changed workflow uses it before classifying the PR as
+`needs migration`. When the Copilot risk scan explicitly finds that a generic breaking
 change does not apply, automation may classify the PR as safe. The reviewer
 should record the applicable behavior and next validation step instead of
 approving from guesswork.
