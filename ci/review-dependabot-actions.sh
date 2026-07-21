@@ -123,6 +123,11 @@ copilot_reason_for_risk() {
       else
         ""
       end
+    | if . == "" and $risk == "advanced_review" then
+        "Copilot marked this PR for advanced review without a reason"
+      else
+        .
+      end
   ' "${copilot_hints_path}" 2>/dev/null | head -n 1 || true
 }
 
