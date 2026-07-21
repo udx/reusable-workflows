@@ -2057,7 +2057,7 @@ jobs:
           echo "✅ Notification message generated"
 
       - name: Send notification
-        uses: slackapi/slack-github-action@v3
+        uses: slackapi/slack-github-action@v4
         with:
           payload: ${{ steps.generate_message.outputs.payload }}
           webhook: ${{ env.SLACK_WEBHOOK_URL }}
