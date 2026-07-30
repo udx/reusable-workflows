@@ -134,6 +134,7 @@ jobs:
       release_version: ${{ steps.set_version.outputs.version }}
       version_source: ${{ steps.set_version.outputs.version_source }}
       version_config_path: ${{ steps.validate_paths.outputs.version_config_path }}
+      release_exists: ${{ steps.check_release.outputs.exists || 'false' }}
 
       # Docker configuration
       docker_has_credentials: ${{ steps.extract_docker_creds.outputs.has_credentials }}
@@ -470,6 +471,24 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "version_source=${VERSION_SOURCE}" >> $GITHUB_OUTPUT
           echo "✅ Version set successfully"
+
+      - name: Check if release tag already exists
+        id: check_release
+        if: steps.branches.outputs.is_release_branch == 'true'
+        uses: actions/github-script@v9
+        env:
+          RELEASE_VERSION: ${{ steps.set_version.outputs.version }}
+        with:
+          script: |
+            const version = process.env.RELEASE_VERSION;
+            const { data: refs } = await github.rest.git.listMatchingRefs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${version}`
+            });
+            const exists = refs.some(ref => ref.ref === `refs/tags/${version}`);
+            core.setOutput('exists', exists ? 'true' : 'false');
+            if (exists) core.warning(`Tag ${version} already exists. Skipping release publishing.`);
 
       - name: Extract Docker Hub Credentials
         id: extract_docker_creds
@@ -1089,6 +1108,7 @@ jobs:
       needs.control-gate.result == 'success' &&
       needs.build-and-scan.result == 'success' &&
       needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.release_exists == 'false' &&
       needs.config.outputs.enable_github_release != 'false'
     permissions:
       contents: write
@@ -1235,7 +1255,8 @@ jobs:
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.build_amd64_enabled == 'true' &&
-      needs.config.outputs.is_release_branch == 'true'
+      needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.release_exists == 'false'
     permissions:
       contents: write
     env:
@@ -1387,7 +1408,8 @@ jobs:
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.build_arm64_enabled == 'true' &&
-      needs.config.outputs.is_release_branch == 'true'
+      needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.release_exists == 'false'
     permissions:
       contents: write
     env:
@@ -1538,6 +1560,7 @@ jobs:
       needs.config.outputs.docker_has_credentials == 'true' &&
       needs.config.outputs.docker_has_publish_config == 'true' &&
       needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.release_exists == 'false' &&
       needs.config.outputs.manifest_required == 'true' &&
       (needs.config.outputs.build_amd64_enabled != 'true' || needs.build-amd64.result == 'success') &&
       (needs.config.outputs.build_arm64_enabled != 'true' || needs.build-arm64.result == 'success')
@@ -1626,7 +1649,8 @@ jobs:
       needs.build-and-scan.result == 'success' &&
       needs.config.outputs.gcp_has_credentials == 'true' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
-      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
+      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch') &&
+      (needs.config.outputs.is_release_branch != 'true' || needs.config.outputs.release_exists == 'false')
     permissions:
       contents: read
       id-token: write
@@ -1793,7 +1817,8 @@ jobs:
       needs.build-and-scan.result == 'success' &&
       needs.config.outputs.acr_has_credentials == 'true' &&
       (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
-      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch')
+      (needs.config.outputs.is_release_branch == 'true' || github.event_name == 'workflow_dispatch') &&
+      (needs.config.outputs.is_release_branch != 'true' || needs.config.outputs.release_exists == 'false')
     permissions:
       contents: read
       id-token: write
@@ -1975,7 +2000,8 @@ jobs:
       (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') &&
       (needs.google-cloud-release.result == 'success' || needs.google-cloud-release.result == 'skipped') &&
       (needs.azure-container-registry-release.result == 'success' || needs.azure-container-registry-release.result == 'skipped') &&
-      needs.config.outputs.is_release_branch == 'true'
+      needs.config.outputs.is_release_branch == 'true' &&
+      needs.config.outputs.release_exists == 'false'
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
