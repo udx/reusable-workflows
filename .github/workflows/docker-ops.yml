@@ -481,14 +481,18 @@ jobs:
         with:
           script: |
             const version = process.env.RELEASE_VERSION;
-            const { data: refs } = await github.rest.git.listMatchingRefs({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `tags/${version}`
-            });
-            const exists = refs.some(ref => ref.ref === `refs/tags/${version}`);
-            core.setOutput('exists', exists ? 'true' : 'false');
-            if (exists) core.warning(`Tag ${version} already exists. Skipping release publishing.`);
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${version}`
+              });
+              core.setOutput('exists', 'true');
+              core.warning(`Tag ${version} already exists. Skipping release publishing.`);
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.setOutput('exists', 'false');
+            }
 
       - name: Extract Docker Hub Credentials
         id: extract_docker_creds
