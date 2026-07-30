@@ -1091,7 +1091,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Upload Vulnerability Scan Results
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.3
         if: ${{ env.ENABLE_SECURITY_SCAN != 'false' && env.ENABLE_SECURITY_UPLOAD != 'false' && env.IS_RELEASE_BRANCH == 'true' }}
         with:
           sarif_file: "trivy-results.sarif"
