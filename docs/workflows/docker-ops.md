@@ -176,6 +176,12 @@ jobs:
 | **ACR**            | Release branch or manual | `version`, `latest` (release)<br>`branch-name` (feature) | `acr_registry`, `acr_repository`, `azure_client_id`, `azure_tenant_id`, `azure_subscription_id`     |
 | **Slack**          | After release            | -                                                        | `slack_webhook_url`                                                                                 |
 
+On a release branch, `docker-ops` checks whether the resolved version already
+exists as a Git tag before publishing. If it does, the workflow still builds and
+scans but skips GitHub Release creation, Docker Hub, GCP, ACR, and Slack
+notification. Manually dispatched non-release GCP and ACR publishes are not
+affected.
+
 **Docker Hub release tags:**
 - `build_platforms` controls which native Docker Hub architecture jobs run
 - `linux/amd64` and `linux/arm64` are built natively on matching runners (no QEMU/binfmt emulation)

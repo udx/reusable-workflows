@@ -5,8 +5,8 @@ version: udx.dev/dev.kit/v1
 generator:
   tool: dev.kit
   repo: https://github.com/udx/dev.kit
-  version: 0.13.0
-  generated_at: 2026-07-01T13:13:10Z
+  version: 0.20.1
+  generated_at: 2026-07-30T15:35:58Z
   sources:
     homepage: https://udx.dev/kit
     repository: https://github.com/udx/dev.kit
