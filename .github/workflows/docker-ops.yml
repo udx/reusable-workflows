@@ -965,7 +965,7 @@ jobs:
 
       - name: Log in to Docker Hub
         if: env.DOCKER_HAS_CREDENTIALS == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.5.2
         with:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1286,7 +1286,7 @@ jobs:
           cache-binary: ${{ needs.config.outputs.enable_cache == 'true' }}
 
       - name: Log in
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.5.2
         with:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
@@ -1439,7 +1439,7 @@ jobs:
           cache-binary: ${{ needs.config.outputs.enable_cache == 'true' }}
 
       - name: Log in
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.5.2
         with:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
@@ -1584,7 +1584,7 @@ jobs:
           cache-binary: ${{ needs.config.outputs.enable_cache == 'true' }}
 
       - name: Log in
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.5.2
         with:
           username: ${{ env.DOCKER_LOGIN }}
           password: ${{ env.DOCKER_PASSWORD }}
@@ -1683,7 +1683,7 @@ jobs:
 
       - name: Log in to Docker Hub
         if: env.DOCKER_HAS_CREDENTIALS == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.5.2
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
@@ -1851,7 +1851,7 @@ jobs:
 
       - name: Log in to Docker Hub
         if: env.DOCKER_HAS_CREDENTIALS == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.5.2
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
