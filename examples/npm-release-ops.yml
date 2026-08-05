@@ -14,6 +14,7 @@ jobs:
     with:
       node_version: "24"
       release_branch: "latest"
+      npm_tag: "latest"
       provenance: "true"
       dist_dir: "dist"
       enable_gh_release: "true"
