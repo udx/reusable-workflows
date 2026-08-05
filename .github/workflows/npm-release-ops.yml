@@ -18,6 +18,11 @@ on:
         required: false
         default: "latest"
         type: string
+      npm_tag:
+        description: "NPM: Dist-tag assigned to the published version (default: latest)"
+        required: false
+        default: "latest"
+        type: string
       enable_gh_release:
         description: "GitHub: Whether to create a GitHub release (default: true)"
         required: false
@@ -43,6 +48,7 @@ jobs:
       node_version: ${{ steps.store_inputs.outputs.node_version }}
       provenance: ${{ steps.store_inputs.outputs.provenance }}
       release_branch: ${{ steps.store_inputs.outputs.release_branch }}
+      npm_tag: ${{ steps.store_inputs.outputs.npm_tag }}
       enable_gh_release: ${{ steps.store_inputs.outputs.enable_gh_release }}
       working_directory: ${{ steps.store_inputs.outputs.working_directory }}
       dist_dir: ${{ steps.store_inputs.outputs.dist_dir }}
@@ -64,14 +70,15 @@ jobs:
           NODE_VERSION: ${{ inputs.node_version }}
           PROVENANCE: ${{ inputs.provenance }}
           RELEASE_BRANCH: ${{ inputs.release_branch }}
+          NPM_TAG: ${{ inputs.npm_tag }}
           ENABLE_GH_RELEASE: ${{ inputs.enable_gh_release }}
           DIST_DIR: ${{ inputs.dist_dir }}
         run: |
-
           echo "Inputs Preview:"
           echo "Node version: $NODE_VERSION"
           echo "Provenance: $PROVENANCE"
           echo "Release branch: $RELEASE_BRANCH"
+          echo "NPM tag: $NPM_TAG"
           echo "GitHub release: $ENABLE_GH_RELEASE"
           echo "Dist directory: $DIST_DIR"
 
@@ -79,20 +86,7 @@ jobs:
           echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "provenance=$PROVENANCE" >> $GITHUB_OUTPUT
           echo "release_branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
-          echo "enable_gh_release=$ENABLE_GH_RELEASE" >> $GITHUB_OUTPUT
-          echo "dist_dir=$DIST_DIR" >> $GITHUB_OUTPUT
-
-          echo "Inputs Preview:"
-          echo "Node version: $NODE_VERSION"
-          echo "Provenance: $PROVENANCE"
-          echo "Release branch: $RELEASE_BRANCH"
-          echo "GitHub release: $ENABLE_GH_RELEASE"
-          echo "Dist directory: $DIST_DIR"
-
-          echo "Set output from inputs..."
-          echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
-          echo "provenance=$PROVENANCE" >> $GITHUB_OUTPUT
-          echo "release_branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
+          echo "npm_tag=$NPM_TAG" >> $GITHUB_OUTPUT
           echo "enable_gh_release=$ENABLE_GH_RELEASE" >> $GITHUB_OUTPUT
           echo "working_directory=$WORKING_DIRECTORY" >> $GITHUB_OUTPUT
           echo "dist_dir=$DIST_DIR" >> $GITHUB_OUTPUT
@@ -169,6 +163,7 @@ jobs:
           NODE_VERSION: ${{ steps.store_inputs.outputs.node_version }}
           PROVENANCE: ${{ steps.store_inputs.outputs.provenance }}
           RELEASE_BRANCH: ${{ steps.store_inputs.outputs.release_branch }}
+          NPM_TAG: ${{ steps.store_inputs.outputs.npm_tag }}
           ENABLE_GH_RELEASE: ${{ steps.store_inputs.outputs.enable_gh_release }}
           WORKING_DIRECTORY: ${{ steps.store_inputs.outputs.working_directory }}
           DIST_DIR: ${{ steps.store_inputs.outputs.dist_dir }}
@@ -184,6 +179,7 @@ jobs:
           echo "Node: $NODE_VERSION"
           echo "Provenance: $PROVENANCE"
           echo "Release branch: $RELEASE_BRANCH"
+          echo "NPM tag: $NPM_TAG"
           echo "GitHub release: $ENABLE_GH_RELEASE"
           echo "Working dir: $WORKING_DIRECTORY"
           echo "Dist dir: $DIST_DIR"
@@ -308,7 +304,7 @@ jobs:
       name: ${{ needs.config.outputs.current_branch }}
     env:
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
-      RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
+      NPM_TAG: ${{ needs.config.outputs.npm_tag }}
       RELEASE_VERSION: ${{ needs.config.outputs.release_version }}
       NODE_VERSION: ${{ needs.config.outputs.node_version }}
       PACKAGE_NAME: ${{ needs.config.outputs.package_name }}
@@ -340,7 +336,7 @@ jobs:
         if: env.IS_RELEASE_BRANCH == 'true'
         env:
           PROVENANCE: ${{ env.PROVENANCE }}
-          NPM_TAG: ${{ env.RELEASE_BRANCH }}
+          NPM_TAG: ${{ env.NPM_TAG }}
         run: |
           echo "🚢 Publishing to NPM..."
           PUBLISH_ARGS=()
@@ -361,6 +357,7 @@ jobs:
     env:
       CURRENT_BRANCH: ${{ needs.config.outputs.current_branch }}
       RELEASE_BRANCH: ${{ needs.config.outputs.release_branch }}
+      NPM_TAG: ${{ needs.config.outputs.npm_tag }}
       IS_RELEASE_BRANCH: ${{ needs.config.outputs.is_release_branch }}
       ENABLE_GH_RELEASE: ${{ needs.config.outputs.enable_gh_release }}
       NPM_RELEASE_RESULT: ${{ needs.npm-release.result }}
@@ -372,6 +369,7 @@ jobs:
           echo "-------------------"
           echo "Branch: $CURRENT_BRANCH"
           echo "Release branch: $RELEASE_BRANCH"
+          echo "NPM tag: $NPM_TAG"
           echo "Is release branch: $IS_RELEASE_BRANCH"
           echo "NPM release result: $NPM_RELEASE_RESULT"
           echo "GitHub release result: $GITHUB_RELEASE_RESULT"

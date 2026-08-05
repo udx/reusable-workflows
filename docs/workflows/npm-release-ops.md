@@ -25,7 +25,7 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 
 - Runs tests (`npm test --if-present`).
 - Runs build (`npm run build --if-present`).
-- Runs publish step with provenance (if enabled).
+- Runs publish step with provenance (if enabled) and the configured npm dist-tag.
 - Creates a GitHub release if `enable_gh_release` is true.
 
 ### Non-Release Branch
@@ -41,6 +41,7 @@ Call this workflow from your release pipeline (see [example](../../examples/npm-
 | `node_version`      | Node.js: Version to use                          | `24`     |
 | `provenance`        | NPM: Enable provenance                           | `true`   |
 | `release_branch`    | Branch: Deployment branch that triggers releases | `latest` |
+| `npm_tag`           | NPM: Dist-tag assigned to the published version  | `latest` |
 | `enable_gh_release` | GitHub: Whether to create a GitHub release       | `true`   |
 | `dist_dir`          | Common: Directory containing package.json        | `dist`   |
 
@@ -68,6 +69,7 @@ Called workflows cannot elevate permissions beyond caller scope.
 
 - Use `dist_dir` to point at the directory containing `package.json`.
 - The release version is read from `package.json`.
+- `release_branch` controls which Git branch may publish; `npm_tag` controls the npm dist-tag independently.
 - Use Trusted Publishing (`id-token: write`) for `npm publish`.
 - Static npm publish tokens are a legacy approach and are not supported or maintained in this workflow.
 
@@ -80,13 +82,16 @@ jobs:
     uses: udx/reusable-workflows/.github/workflows/npm-release-ops.yml@master
     with:
       node_version: "24"
-      release_branch: "latest"
+      release_branch: "main"
+      npm_tag: "latest"
       dist_dir: "dist"
       provenance: true
       enable_gh_release: true
     secrets:
       gh_token: ${{ secrets.GH_TOKEN }}
 ```
+
+Set `npm_tag` to a non-default tag only when that is intentional (for example, `next`). Existing callers that relied on `release_branch` also setting the npm tag should set `npm_tag` explicitly.
 
 ### If your own reusable workflow declares `npm_token` and `package_version`
 
