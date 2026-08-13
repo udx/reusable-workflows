@@ -140,7 +140,7 @@ jobs:
 
       # commit changes to temporary release branch and create a new tag
       - name: Commit changes
-        uses: EndBug/add-and-commit@v10
+        uses: EndBug/add-and-commit@v11
         with:
           message: Cleanup files for release
           new_branch: ${{ steps.vars.outputs.branch }}
