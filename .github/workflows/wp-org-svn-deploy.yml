@@ -33,10 +33,19 @@ jobs:
     name: deploy
     runs-on: ubuntu-latest
     steps:
+      - name: Validate tag
+        run: |
+          if [[ "${TAG}" == *"/"* ]]; then
+            echo "::error::Tag '${TAG}' must not contain slashes (SVN tag path would be nested)."
+            exit 1
+          fi
+        env:
+          TAG: ${{ inputs.tag }}
+
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
 
       # Deploys trunk/ + tags/<tag>/ and .wordpress-org/ assets via SVN.
       # Refuses to commit when dry_run is true.
