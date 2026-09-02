@@ -6,7 +6,7 @@ Reusable workflow for deploying a tagged WordPress plugin release to the WordPre
 
 - Deploys `trunk/` + `tags/<tag>/` to `plugins.svn.wordpress.org/<slug>/`
 - Handles `.wordpress-org/` assets (banners, icons, screenshots) when present
-- `dry_run` mode rehearses checkout and SVN package preparation without committing (credentials and commit permission are only exercised on a real run)
+- `dry_run` mode rehearses checkout and SVN package preparation without committing; credentials are still required and injected (the deploy tool verifies they are set before anything runs) — only the authenticated commit is skipped
 
 ## Quick Start
 

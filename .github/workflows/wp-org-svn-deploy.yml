@@ -32,6 +32,11 @@ jobs:
   deploy:
     name: deploy
     runs-on: ubuntu-latest
+    # SVN trunk/tag state is shared and mutable: never let two deploys of the
+    # same plugin overlap.
+    concurrency:
+      group: wp-org-svn-deploy-${{ github.repository }}
+      cancel-in-progress: false
     steps:
       - name: Validate tag
         run: |
