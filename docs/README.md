@@ -11,6 +11,7 @@ Detailed documentation for each reusable workflow, including input/secret tables
 - `docs/workflows/js-ops.md`
 - `docs/workflows/npm-release-ops.md`
 - `docs/workflows/wp-gh-release-ops.md`
+- `docs/workflows/wp-org-svn-deploy.md`
 
 ## For Workflow Users
 
