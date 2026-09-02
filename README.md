@@ -52,6 +52,7 @@ When calling any reusable workflow, use the canonical caller patterns in [`docs/
 | **[js-ops](.github/workflows/js-ops.yml)**                       | Build and validate immutable Next.js standalone bundles, with optional GitHub Release publishing and metadata        | [📖 Docs](docs/workflows/js-ops.md)            | [📋 Example](examples/js-ops.yml)            |
 | **[npm-release-ops](.github/workflows/npm-release-ops.yml)**     | Build and publish npm packages with provenance, versioning, and release automation                                   | [📖 Docs](docs/workflows/npm-release-ops.md)   | [📋 Example](examples/npm-release-ops.yml)   |
 | **[wp-gh-release-ops](.github/workflows/wp-gh-release-ops.yml)** | Generate and publish WordPress plugin releases on GitHub                                                             | [📖 Docs](docs/workflows/wp-gh-release-ops.md) | [📋 Example](examples/wp-gh-release-ops.yml) |
+| **[wp-org-svn-deploy](.github/workflows/wp-org-svn-deploy.yml)** | Deploy a tagged WordPress plugin release to the WordPress.org Plugin Directory (SVN)                                 | [📖 Docs](docs/workflows/wp-org-svn-deploy.md) | [📋 Example](examples/wp-org-svn-deploy.yml) |
 
 ## Features
 

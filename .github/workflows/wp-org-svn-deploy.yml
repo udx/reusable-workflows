@@ -1,0 +1,51 @@
+name: Deploy WP Plugin to WordPress.org SVN
+run-name: Deploy WP Plugin to WordPress.org SVN
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to deploy (e.g. 1.2.3a). The tag must exist in the calling repository.'
+        required: true
+        type: string
+      slug:
+        description: 'WordPress.org plugin slug, default: calling repository name'
+        required: false
+        type: string
+      dry_run:
+        description: 'Run the deployment process without committing to SVN'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      svn_username:
+        description: 'WordPress.org SVN username (committer account)'
+        required: true
+      svn_password:
+        description: 'WordPress.org SVN password'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.tag }}
+
+      # Deploys trunk/ + tags/<tag>/ and .wordpress-org/ assets via SVN.
+      # Refuses to commit when dry_run is true.
+      - name: Deploy to WordPress.org
+        uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
+        with:
+          dry-run: ${{ inputs.dry_run }}
+        env:
+          SVN_USERNAME: ${{ secrets.svn_username }}
+          SVN_PASSWORD: ${{ secrets.svn_password }}
+          SLUG: ${{ inputs.slug }}
+          VERSION: ${{ inputs.tag }}
