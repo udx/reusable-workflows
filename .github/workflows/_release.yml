@@ -60,7 +60,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ steps.checkout_ref.outputs.value }}
@@ -173,7 +173,7 @@ jobs:
       DRAFT: ${{ needs.config.outputs.draft }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ needs.config.outputs.target_sha }}
