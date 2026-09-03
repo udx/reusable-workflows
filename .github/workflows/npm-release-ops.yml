@@ -62,7 +62,7 @@ jobs:
       WORKING_DIRECTORY: "."
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Store inputs as outputs
         id: store_inputs
@@ -221,7 +221,7 @@ jobs:
       WORKING_DIRECTORY: ${{ needs.config.outputs.working_directory }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -265,7 +265,7 @@ jobs:
       CHANGELOG_DESCRIPTION: ${{ needs.config.outputs.changelog_description }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -313,7 +313,7 @@ jobs:
       DIST_DIR: ${{ needs.config.outputs.dist_dir }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
