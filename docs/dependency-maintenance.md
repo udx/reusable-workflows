@@ -6,6 +6,9 @@ workflow templates current without turning every patch release into manual work.
 ## Versioning Policy
 
 - Prefer major version tags for GitHub Actions, for example `actions/checkout@v7`.
+- Preserve existing major tags when reviewing updates. A proposal such as
+  `github/codeql-action/upload-sarif@v4` to `@v4.37.3` narrows the version
+  reference and should not be accepted solely because a patch release exists.
 - Do not pin actions to Git SHAs by default.
 - If upstream does not publish the desired broad tag, use the broadest existing
   tag that matches the reviewed risk boundary. For example, use a minor-line tag
@@ -14,6 +17,8 @@ workflow templates current without turning every patch release into manual work.
 - Use a more specific tag only when the action ecosystem or rollout risk makes it
   useful, for example a temporary `slackapi/slack-github-action@v3.0.1` pin while
   validating a migration.
+- Document the reason for an exception in the PR. Approval of that exception
+  applies to that PR and does not replace the default policy.
 
 This keeps routine patch and minor updates quiet while still allowing Dependabot
 to surface meaningful major-line changes.
