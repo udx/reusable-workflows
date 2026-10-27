@@ -5,43 +5,17 @@ repository:
   owner: udx
   default_branch: master
 branches:
-  - name: chore/gitversion-6.5.0
-    rules: {}
   - name: chore/gitversion-v4.2.0-6.5.0
     rules: {}
   - name: dependabot/github_actions/github/codeql-action-4.37.3
     rules: {}
   - name: dependency_update
     rules: {}
-  - name: docker-ops-cache-toggle
-    rules: {}
-  - name: docker-ops-config-checkout-hotfix
-    rules: {}
-  - name: docker-ops-fixes
-    rules: {}
-  - name: docker-ops-working-directory
-    rules: {}
   - name: docs/action-version-policy
     rules: {}
   - name: feat/cli-standardization
     rules: {}
-  - name: feature/context7-sync
-    rules: {}
-  - name: feature/enable-github-release-input
-    rules: {}
-  - name: feature/wp-org-svn-deploy
-    rules: {}
-  - name: fix/dependabot-copilot-triage
-    rules: {}
   - name: fix/docker-ops-nonrelease-auth-guard
-    rules: {}
-  - name: fix/docker-ops-skip-existing-release
-    rules: {}
-  - name: fix/npm-dist-tag
-    rules: {}
-  - name: fix-docker-ops-branch-placeholders
-    rules: {}
-  - name: js-ops-release-assets-without-artifacts
     rules: {}
   - name: master
     rules:
