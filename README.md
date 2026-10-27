@@ -90,12 +90,12 @@ Repository automation workflows (tests, release automation, etc.) are marked wit
 
 ### Rabbit CI Integration
 
-Rabbit CI and agent workflows use repo-owned context from [`.rabbit/`](.rabbit/readme.md). Refresh it with `dev.kit repo` after changing workflow contracts, docs, examples, or maintainer automation.
+Rabbit CI uses the generated delivery configuration in [`.rabbit/repo.yaml`](.rabbit/repo.yaml). See [`.rabbit/`](.rabbit/readme.md) for refresh instructions.
 
 ### Local Checks
 
 - `bash tests/docker-ops-build-args.sh` validates `docker-ops` build argument placeholder handling, including branch names with `/` and `&`.
-- `dev.kit repo` refreshes generated repo context for Rabbit CI.
+- `rabbit.ci` refreshes Rabbit CI repository configuration.
 
 ## License
 
