@@ -6,8 +6,8 @@ Production-ready GitHub Actions workflows for CI/CD. Self-contained, configurabl
 
 1. **Choose workflow** from [Available Workflows](#available-workflows)
 2. **Copy manifest example** to `.github/workflows/{name}.yml` in your repository
-3. **Modify pipeline configuration** to match your needs - see [Docs](docs) for all options, required permissions, and supported triggers
-4. **Ensure secrets/vars** are configured - follow setup instructions in Docs
+3. **Modify pipeline configuration** to match your needs - use the linked guide in [Available Workflows](#available-workflows) for options, required permissions, and supported triggers
+4. **Ensure secrets/vars** are configured - follow the selected workflow guide
 5. **Push and run** - enjoy!
 
 **💡 Pro Tip:** Start from the examples in `examples/` and tailor inputs/secrets using the docs.
@@ -30,7 +30,7 @@ jobs:
 
 ## Reusable Caller Essentials
 
-When calling any reusable workflow, use the canonical caller patterns in [`docs/caller-reference/caller-patterns.md`](docs/caller-reference/caller-patterns.md) and the docs index in [`docs/README.md`](docs/README.md):
+When calling any reusable workflow, follow the [caller guide](docs/CALLER_GUIDE.md):
 
 - Set permissions in the caller job (`contents`, `packages`, `id-token`) using least privilege.
 - Use clear `workflow_call` input names (prefer `lower_snake_case`, for example `deploy_environment`).
@@ -54,6 +54,8 @@ When calling any reusable workflow, use the canonical caller patterns in [`docs/
 | **[wp-gh-release-ops](.github/workflows/wp-gh-release-ops.yml)** | Generate and publish WordPress plugin releases on GitHub                                                             | [📖 Docs](docs/workflows/wp-gh-release-ops.md) | [📋 Example](examples/wp-gh-release-ops.yml) |
 | **[wp-org-svn-deploy](.github/workflows/wp-org-svn-deploy.yml)** | Deploy a tagged WordPress plugin release to the WordPress.org Plugin Directory (SVN)                                 | [📖 Docs](docs/workflows/wp-org-svn-deploy.md) | [📋 Example](examples/wp-org-svn-deploy.yml) |
 
+For documentation indexing, use [Context7 Sync](.github/workflows/context7-ops.yml); its [guide](docs/workflows/context7-ops.md) includes caller examples.
+
 ## Features
 
 - **Reusable** - Designed for `workflow_call` consumption
@@ -72,6 +74,10 @@ Each template is structured as follows:
 
 ## Development
 
+Follow the [engineering standards](docs/STANDARDS.md) when designing workflows
+and the [dependency maintenance policy](docs/dependency-maintenance.md) when
+updating actions or handling Dependabot PRs.
+
 ### Adding a Template
 
 To add a new reusable workflow:
@@ -86,7 +92,6 @@ Repository automation workflows (tests, release automation, etc.) are marked wit
 
 - [`.github/workflows/_release.yml`](.github/workflows/_release.yml)
 - [`ci/git-version.yml`](ci/git-version.yml)
-- Details: [`docs/release-automation.md`](docs/release-automation.md)
 
 ### Rabbit CI Integration
 
