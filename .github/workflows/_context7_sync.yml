@@ -10,6 +10,6 @@ permissions:
 
 jobs:
   sync:
-    uses: udx/reusable-workflows/.github/workflows/context7-ops.yml@master
+    uses: ./.github/workflows/context7-ops.yml
     secrets:
       context7_api_key: ${{ secrets.CONTEXT7_API_KEY }}
