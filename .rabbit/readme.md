@@ -4,12 +4,25 @@
 It records branches, rules, environments, workflow interfaces, and configured
 secret and variable names. Secret and variable values are excluded.
 
+## Setup
+
+With Node.js and npm installed, install the CLI:
+
+```bash
+npm install --global @udx/rabbit-repo
+```
+
+GitHub discovery uses the authenticated `gh` CLI. Make sure it has access to
+this repository before refreshing; unavailable GitHub data is left empty.
+
 ## Refresh
 
 Run `rabbit.ci` after changing workflows, branches, branch rules, GitHub
 Environments, or configured secret/variable names. Workflow-only action version
 changes may produce no metadata diff. Explanatory documentation edits do not
 require a refresh.
+
+From the repository root:
 
 ```bash
 rabbit.ci
