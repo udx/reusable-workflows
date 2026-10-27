@@ -7,8 +7,6 @@ repository:
 branches:
   - name: chore/gitversion-v4.2.0-6.5.0
     rules: {}
-  - name: dependabot/github_actions/github/codeql-action-4.37.3
-    rules: {}
   - name: dependency_update
     rules: {}
   - name: docs/action-version-policy
