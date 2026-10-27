@@ -15,8 +15,9 @@ workflow templates current without turning every patch release into manual work.
   useful, for example a temporary `slackapi/slack-github-action@v3.0.1` pin while
   validating a migration.
 
-This keeps routine patch and minor updates quiet while still allowing Dependabot
-to surface meaningful major-line changes.
+`.github/dependabot.yml` checks weekly for major GitHub Actions updates and
+ignores minor and patch updates. Deliberately pinned actions therefore need
+manual review for routine updates within their pinned release line.
 
 CodeQL `actions/unpinned-tag` findings are expected with this policy. Do not mark
 them as false positives, because mutable tags are not immutable pins. Dismiss them

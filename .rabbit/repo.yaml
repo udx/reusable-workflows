@@ -1,0 +1,361 @@
+kind: repo
+version: udx.dev/rabbit.ci/repo/v1
+repository:
+  name: reusable-workflows
+  owner: udx
+  default_branch: master
+branches:
+  - name: chore/gitversion-v4.2.0-6.5.0
+    rules: {}
+  - name: dependency_update
+    rules: {}
+  - name: docs/action-version-policy
+    rules: {}
+  - name: feat/cli-standardization
+    rules: {}
+  - name: fix/docker-ops-nonrelease-auth-guard
+    rules: {}
+  - name: master
+    rules:
+      allow_deletions: false
+      allow_force_pushes: false
+      pull_request:
+        approvals: 1
+        code_owner_review: true
+        stale_reviews: true
+        last_push_approval: false
+        conversation_resolution: true
+        merge_methods:
+          - merge
+          - squash
+          - rebase
+      copilot_review:
+        on_push: true
+        drafts: false
+configuration:
+  secrets:
+    organization:
+      - BITBUCKET_TOKEN
+      - CONTEXT7_API_KEY
+      - COPILOT_GITHUB_TOKEN
+      - DEPENDABOT_REVIEWER_TOKEN
+    repository: []
+  variables:
+    organization:
+      - DOCKER_LOGIN
+      - DOCKER_ORG
+      - GCP_PROJECT_ID
+      - GCP_REGION
+      - GCP_WORKLOAD_IDENTITY_PROVIDER
+      - GH_SERVICE_ACCOUNT_EMAIL
+    repository:
+      - ACR_REGISTRY
+      - ACR_REPO
+environments:
+  - name: copilot
+    branches:
+      - "*"
+    approvals: []
+    wait_minutes: 0
+    admin_bypass: true
+    secrets: []
+    variables: []
+  - name: Master
+    branches:
+      - master
+    approvals: []
+    wait_minutes: 0
+    admin_bypass: true
+    secrets: []
+    variables: []
+workflows:
+  - path: .github/workflows/_context7_sync.yml
+    triggers:
+      push:
+        branches:
+          - master
+      workflow_dispatch: {}
+    permissions:
+      contents: write
+  - path: .github/workflows/_dependabot-actions-review.yml
+    triggers:
+      schedule:
+        - cron: 0 6 * * *
+      workflow_dispatch:
+        inputs:
+          pr_number:
+            required: false
+            type: string
+          dry_run:
+            required: false
+            default: "true"
+            type: choice
+            options:
+              - "true"
+              - "false"
+    permissions:
+      actions: write
+      contents: write
+      issues: write
+      pull-requests: write
+  - path: .github/workflows/_release.yml
+    triggers:
+      push:
+        branches:
+          - master
+      workflow_dispatch:
+        inputs:
+          target_ref:
+            required: false
+            default: ""
+            type: string
+          prerelease:
+            required: false
+            default: true
+            type: boolean
+          draft:
+            required: false
+            default: false
+            type: boolean
+    permissions:
+      contents: write
+  - path: .github/workflows/context7-ops.yml
+    triggers:
+      workflow_call:
+        inputs:
+          library_name:
+            required: false
+            type: string
+            default: ""
+          branch:
+            required: false
+            type: string
+            default: ""
+        secrets:
+          context7_api_key:
+            required: true
+    permissions:
+      contents: read
+  - path: .github/workflows/docker-ops.yml
+    triggers:
+      workflow_call:
+        inputs:
+          image_name:
+            required: true
+            type: string
+          gcp_region:
+            required: false
+            type: string
+          gcp_project_id:
+            required: false
+            type: string
+          gcp_repo:
+            required: false
+            type: string
+          gcp_workload_identity_provider:
+            required: false
+            type: string
+          gcp_service_account:
+            required: false
+            type: string
+          acr_registry:
+            required: false
+            type: string
+          acr_repository:
+            required: false
+            type: string
+          azure_client_id:
+            required: false
+            type: string
+          azure_tenant_id:
+            required: false
+            type: string
+          azure_subscription_id:
+            required: false
+            type: string
+          release_branch:
+            required: false
+            default: latest
+            type: string
+          dockerfile_path:
+            required: false
+            default: ./Dockerfile
+            type: string
+          working_directory:
+            required: false
+            default: .
+            type: string
+          build_platforms:
+            required: false
+            default: linux/amd64,linux/arm64
+            type: string
+          version_config_path:
+            required: false
+            default: ci/git-version.yml
+            type: string
+          build_args:
+            required: false
+            default: ""
+            type: string
+          enable_security_scan:
+            required: false
+            default: "true"
+            type: string
+          enable_security_upload:
+            required: false
+            default: "true"
+            type: string
+          enable_sbom:
+            required: false
+            default: "true"
+            type: string
+          enable_cache:
+            required: false
+            default: "true"
+            type: string
+          enable_github_release:
+            required: false
+            default: "true"
+            type: string
+          docker_login:
+            required: false
+            type: string
+          docker_org:
+            required: false
+            type: string
+          docker_repo:
+            required: false
+            type: string
+        secrets:
+          docker_token:
+            required: false
+          slack_webhook_url:
+            required: false
+  - path: .github/workflows/js-ops.yml
+    triggers:
+      workflow_call:
+        inputs:
+          app_name:
+            required: false
+            default: ""
+            type: string
+          working_directory:
+            required: false
+            default: .
+            type: string
+          node_version:
+            required: false
+            default: "24"
+            type: string
+          package_manager:
+            required: false
+            default: ""
+            type: string
+          pnpm_version:
+            required: false
+            default: "10"
+            type: string
+          build_env:
+            required: false
+            default: ""
+            type: string
+          build_env_file:
+            required: false
+            default: ""
+            type: string
+          release_branch:
+            required: false
+            default: latest
+            type: string
+          run_lint:
+            required: false
+            default: true
+            type: boolean
+          concurrency_enabled:
+            required: false
+            default: true
+            type: boolean
+          concurrency_cancel_in_progress:
+            required: false
+            default: true
+            type: boolean
+        secrets:
+          gh_token:
+            required: false
+        outputs:
+          version:
+            value: ${{ jobs.config.outputs.version }}
+          artifact_type:
+            value: ${{ jobs.config.outputs.artifact_type }}
+          bundle_sha256:
+            value: ${{ jobs.build-and-scan.outputs.bundle_sha256 }}
+  - path: .github/workflows/npm-release-ops.yml
+    triggers:
+      workflow_call:
+        inputs:
+          node_version:
+            required: false
+            default: "24"
+            type: string
+          provenance:
+            required: false
+            default: true
+            type: boolean
+          release_branch:
+            required: false
+            default: latest
+            type: string
+          npm_tag:
+            required: false
+            default: latest
+            type: string
+          enable_gh_release:
+            required: false
+            default: true
+            type: boolean
+          dist_dir:
+            required: false
+            type: string
+            default: dist
+        secrets:
+          slack_webhook_url:
+            required: false
+          gh_token:
+            required: false
+  - path: .github/workflows/wp-gh-release-ops.yml
+    triggers:
+      workflow_call:
+        inputs:
+          tag:
+            required: true
+            default: 1.2.3
+            type: string
+          version:
+            required: false
+            type: string
+          prerelease:
+            required: false
+            type: string
+    permissions:
+      contents: write
+  - path: .github/workflows/wp-org-svn-deploy.yml
+    triggers:
+      workflow_call:
+        inputs:
+          tag:
+            required: true
+            type: string
+          slug:
+            required: false
+            type: string
+          dry_run:
+            required: false
+            default: false
+            type: boolean
+        secrets:
+          svn_username:
+            required: true
+          svn_password:
+            required: true
+    permissions:
+      contents: read
