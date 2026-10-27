@@ -4,7 +4,12 @@
 It records branches, rules, environments, workflow interfaces, and configured
 secret and variable names. Secret and variable values are excluded.
 
-Refresh it after changing workflows or GitHub delivery settings:
+## Refresh
+
+Run `rabbit.ci` after changing workflows, branches, branch rules, GitHub
+Environments, or configured secret/variable names. Workflow-only action version
+changes may produce no metadata diff. Explanatory documentation edits do not
+require a refresh.
 
 ```bash
 rabbit.ci
