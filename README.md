@@ -95,6 +95,7 @@ Rabbit CI and agent workflows use repo-owned context from [`.rabbit/`](.rabbit/r
 ### Local Checks
 
 - `bash tests/docker-ops-build-args.sh` validates `docker-ops` build argument placeholder handling, including branch names with `/` and `&`.
+- `bash tests/npm-release-ops-notify.sh` checks that the `npm-release-ops` Slack payload and report summary render evaluated values instead of literal shell syntax.
 - `dev.kit repo` refreshes generated repo context for Rabbit CI.
 
 ## License

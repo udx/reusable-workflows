@@ -377,7 +377,11 @@ jobs:
           echo "Build: npm run build --if-present"
           if [ "$IS_RELEASE_BRANCH" == "true" ]; then
             echo "Publish: enabled"
-            echo "GitHub Release: $ENABLE_GH_RELEASE == 'true' && 'enabled' || 'disabled'"
+            if [ "$ENABLE_GH_RELEASE" == "true" ]; then
+              echo "GitHub Release: enabled"
+            else
+              echo "GitHub Release: disabled"
+            fi
           else
             echo "Publish: disabled (non-release branch)"
             echo "GitHub Release: disabled (non-release branch)"
@@ -404,12 +408,12 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
-              "text": "NPM Release for $PACKAGE_NAME: $NPM_RELEASE_RESULT == 'success' && '✅ SUCCESS' || NPM_RELEASE_RESULT == 'cancelled' && '⚪ CANCELLED' || '❌ FAILED'",
+              "text": "NPM Release for ${{ env.PACKAGE_NAME }}: ${{ env.NPM_RELEASE_RESULT == 'success' && '✅ SUCCESS' || env.NPM_RELEASE_RESULT == 'cancelled' && '⚪ CANCELLED' || '❌ FAILED' }}",
               "attachments": [
                 {
-                  "color": "$NPM_RELEASE_RESULT == 'success' && '#36a64f' || '#ec000c'",
+                  "color": "${{ env.NPM_RELEASE_RESULT == 'success' && '#36a64f' || '#ec000c' }}",
                   "fields": [
-                    { "title": "Version", "value": "$RELEASE_VERSION", "short": true },
+                    { "title": "Version", "value": "${{ env.RELEASE_VERSION }}", "short": true },
                     { "title": "Commit", "value": "${{ github.sha }}", "short": true }
                   ]
                 }
