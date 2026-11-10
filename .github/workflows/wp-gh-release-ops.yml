@@ -138,13 +138,13 @@ jobs:
           find ./lib/Google/ -name '.repo-metadata.json' -type f -delete || true
           find ./lib/Google/vendor -name .svn -type d -prune -exec rm -rf '{}' \; || true
 
-      # commit changes to temporary release branch and create a new tag
+      # Commit cleanup to a temporary release branch. The release action creates
+      # the tag through GitHub's API, respecting repository tag-creation rules.
       - name: Commit changes
         uses: EndBug/add-and-commit@v11
         with:
           message: Cleanup files for release
           new_branch: ${{ steps.vars.outputs.branch }}
-          tag: ${{ steps.vars.outputs.full_tag }}
 
       # generate SBOM that will be attached to a release as an artifact
       - name: Create SBOM
@@ -155,17 +155,34 @@ jobs:
           output-file: sbom.spdx.json
           format: spdx-json
 
-      # create and publish release
-      # using version changelog as release notes
-      # attach SBOM as artifact
-      - name: Create and Publish Release
+      # Create the release and attach the SBOM. Prereleases stay drafts until
+      # the upload succeeds so immutable-release repositories accept the asset.
+      - name: Create release and attach SBOM
+        id: release
         uses: softprops/action-gh-release@v3
         with:
           name: "Release ${{ steps.vars.outputs.version }}"
           body: "${{ steps.changelog.outputs.description }}"
           tag_name: ${{ steps.vars.outputs.full_tag }}
+          target_commitish: ${{ steps.vars.outputs.branch }}
           prerelease: ${{ steps.vars.outputs.is_prerelease }}
+          draft: ${{ steps.vars.outputs.is_prerelease }}
           files: sbom.spdx.json
+
+      - name: Publish prerelease after SBOM upload
+        if: ${{ steps.vars.outputs.is_prerelease == 'true' }}
+        uses: actions/github-script@v9
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.RELEASE_ID),
+              draft: false,
+              prerelease: true,
+            });
 
       # delete tag if there was an error
       - name: Delete tag on failure

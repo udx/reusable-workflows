@@ -13,7 +13,13 @@ branches:
     rules: {}
   - name: feat/cli-standardization
     rules: {}
+  - name: fix/context7-local-workflow
+    rules: {}
   - name: fix/docker-ops-nonrelease-auth-guard
+    rules: {}
+  - name: fix/free-disk-space-renamed
+    rules: {}
+  - name: fix/prerelease-immutable-assets
     rules: {}
   - name: master
     rules:
