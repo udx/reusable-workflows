@@ -19,6 +19,8 @@ branches:
     rules: {}
   - name: fix/free-disk-space-renamed
     rules: {}
+  - name: fix/prerelease-immutable-assets
+    rules: {}
   - name: master
     rules:
       allow_deletions: false

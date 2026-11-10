@@ -8,6 +8,7 @@ Reusable workflow for generating and publishing WordPress plugin release on GitH
 - Parse changelog entries from `changes.md` for the target version
 - SBOM generation
 - Prereleases remain drafts until the SBOM upload succeeds, then are published so immutable-release repositories accept assets
+- Tags are created through the GitHub release API from the cleaned temporary branch, avoiding direct tag pushes that repository rules may restrict
 
 ## Quick Start
 
