@@ -13,7 +13,15 @@ branches:
     rules: {}
   - name: feat/cli-standardization
     rules: {}
+  - name: fix/context7-local-workflow
+    rules: {}
   - name: fix/docker-ops-nonrelease-auth-guard
+    rules: {}
+  - name: fix/free-disk-space-renamed
+    rules: {}
+  - name: fix/gcp-buildx
+    rules: {}
+  - name: fix/prerelease-immutable-assets
     rules: {}
   - name: master
     rules:
@@ -157,6 +165,10 @@ workflows:
             type: string
           gcp_service_account:
             required: false
+            type: string
+          gcp_runner:
+            required: false
+            default: ubuntu-24.04
             type: string
           acr_registry:
             required: false
