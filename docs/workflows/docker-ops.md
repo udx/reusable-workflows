@@ -71,6 +71,7 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `gcp_repo`                       | Artifact Registry repo name                       | -                         | For GCP        |
 | `gcp_workload_identity_provider` | Workload Identity Provider resource name          | -                         | For GCP        |
 | `gcp_service_account`            | Service account email for WIF                     | -                         | For GCP        |
+| `gcp_runner`                     | Runner label for GCP image publishing              | `ubuntu-24.04`            |                |
 | **Azure Container Registry**     |
 | `acr_registry`                   | ACR registry name (e.g., `myregistry.azurecr.io`) | -                         | For ACR        |
 | `acr_repository`                 | ACR repository name                               | -                         | For ACR        |
@@ -90,6 +91,17 @@ If your caller currently uses those fields, map them to the declared inputs abov
 | `enable_sbom`                    | Generate and upload SBOM                          | `true`                    |                |
 | `enable_cache`                   | Allow GitHub Actions-backed caches for Buildx/Trivy | `true`                  |                |
 | `enable_github_release`          | Create GitHub Release with tag and changelog       | `true`                    |                |
+
+GCP publishing uses the `docker-container` Buildx driver, matching the Docker
+Hub publishing jobs. To select a larger or dedicated runner, pass `gcp_runner`
+from the caller's repository configuration:
+
+```yaml
+gcp_runner: ${{ vars.GCP_RUNNER || 'ubuntu-24.04' }}
+```
+
+The selected runner label must be available to the calling repository. Existing
+callers can omit this input to keep using the standard Ubuntu runner.
 
 ### Secrets
 
