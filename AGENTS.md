@@ -1,8 +1,12 @@
 # Repository instructions
 
 Read `README.md` and the task-relevant docs before editing workflows.
-Follow [the dependency policy](docs/dependency-maintenance.md): preserve published
-major action tags and document any exact-version or SHA exception in the PR.
+Use maintained major Action tags, such as `docker/setup-buildx-action@v4`, and
+reviewed UDX branches for reusable workflows. Follow the
+[dependency policy](docs/dependency-maintenance.md#versioning-policy) for narrower
+ref exceptions and SHA-pinning feedback. Handle valid unpinned-tag findings as
+accepted risk: dismiss the linked alert with the policy rationale, then reply to
+and resolve the review thread. Keep CodeQL enabled.
 
 For workflow or GitHub delivery-setting changes, follow the
 [Rabbit CI refresh instructions](.rabbit/readme.md#refresh).
