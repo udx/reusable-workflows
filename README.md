@@ -14,6 +14,13 @@ Production-ready GitHub Actions workflows for CI/CD. Self-contained, configurabl
 
 ## Version References
 
+Use maintained major tags for third-party Actions, such as
+`docker/setup-buildx-action@v4`. Reviewed UDX branches, including `@master`, are
+the usual rollout boundary for these reusable workflows. Document narrower tag
+or SHA exceptions in the PR; see the
+[versioning policy](docs/dependency-maintenance.md#versioning-policy), including
+how to handle CodeQL SHA-pinning feedback.
+
 When calling workflows from this repo, you can pin by:
 
 - Branch: `@master`

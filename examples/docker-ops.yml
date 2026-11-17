@@ -36,6 +36,7 @@ jobs:
       image_name: ${{ vars.IMAGE_NAME }}
       working_directory: .
       enable_cache: "true"
+      gcp_runner: ${{ vars.GCP_RUNNER || 'ubuntu-24.04' }}
       gcp_region: ${{ vars.GCP_REGION }}
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gcp_repo: ${{ vars.GCP_REPO }}
@@ -79,6 +80,7 @@ jobs:
       docker_org: ${{ vars.DOCKER_ORG }}
       docker_repo: ${{ vars.DOCKER_REPO }}
       # GCP
+      gcp_runner: ${{ vars.GCP_RUNNER || 'ubuntu-24.04' }}
       gcp_region: ${{ vars.GCP_REGION }}
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gcp_repo: ${{ vars.GCP_REPO }}

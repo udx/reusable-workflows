@@ -19,11 +19,29 @@ workflow templates current without turning every patch release into manual work.
 ignores minor and patch updates. Deliberately pinned actions therefore need
 manual review for routine updates within their pinned release line.
 
-CodeQL `actions/unpinned-tag` findings are expected with this policy. Do not mark
-them as false positives, because mutable tags are not immutable pins. Dismiss them
-as accepted risk, normally with the `won't fix` reason, and include a short
-comment that links the decision to this repository policy and the reviewed tag
-boundary.
+For UDX reusable workflows, reviewed branches such as `@master` are rollout
+boundaries. A temporary feature-branch reference used for caller validation must
+be replaced with the reviewed integration reference before the caller is merged.
+
+### CodeQL unpinned-tag feedback
+
+This policy applies to all workflow PRs, including new uses of an existing
+Action. CodeQL `actions/unpinned-tag` findings are valid with mutable major tags
+and workflow branches. Handle them as accepted risk:
+
+1. Check that the selected major tag exists and the Action's interface is
+   compatible with the workflow. Keep the maintained major tag unless the change
+   needs a documented narrower ref.
+2. Dismiss the linked code-scanning alert with the `won't fix` reason. Record the
+   selected ref and link to this versioning policy. Do not use `false positive`:
+   the reference is mutable, and that supply-chain risk is being accepted.
+3. Reply to the PR thread with the selected ref, policy link, and alert
+   disposition, then resolve the thread. Resolving a thread alone does not
+   dismiss its security alert.
+
+Keep CodeQL enabled and address functional or security defects separately. An
+unpinned-tag recommendation alone does not require replacing a maintained major
+tag with a commit SHA.
 
 ## Review Policy
 

@@ -5,15 +5,11 @@ repository:
   owner: udx
   default_branch: master
 branches:
-  - name: chore/gitversion-v4.2.0-6.5.0
-    rules: {}
   - name: dependency_update
     rules: {}
-  - name: docs/action-version-policy
+  - name: fix/gcp-buildx
     rules: {}
-  - name: feat/cli-standardization
-    rules: {}
-  - name: fix/docker-ops-nonrelease-auth-guard
+  - name: fix/prerelease-immutable-assets
     rules: {}
   - name: master
     rules:
@@ -157,6 +153,10 @@ workflows:
             type: string
           gcp_service_account:
             required: false
+            type: string
+          gcp_runner:
+            required: false
+            default: ubuntu-24.04
             type: string
           acr_registry:
             required: false
