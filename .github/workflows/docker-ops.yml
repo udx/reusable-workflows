@@ -401,7 +401,7 @@ jobs:
 
       - name: Install GitVersion
         if: steps.check_version.outputs.use_gitversion == 'true'
-        uses: gittools/actions/gitversion/setup@v4
+        uses: gittools/actions/gitversion/setup@v5
         with:
           versionSpec: "6.5.0"
 
@@ -429,7 +429,7 @@ jobs:
       - name: Determine Version
         id: gitversion
         if: steps.check_version.outputs.use_gitversion == 'true'
-        uses: gittools/actions/gitversion/execute@v4
+        uses: gittools/actions/gitversion/execute@v5
         with:
           configFilePath: ${{ steps.validate_paths.outputs.version_config_path }}
 
